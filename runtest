@@ -5,4 +5,5 @@ expect() {
 }
 
 expect '?x@@3HA' 'int x'
+# expect '?x@@3PEAHEA' 'int *x'
 echo OK
