@@ -18,8 +18,6 @@
 #include <utility>
 #include <vector>
 
-enum class error { ok, bad };
-
 class string {
 public:
   string() = default;
@@ -64,63 +62,59 @@ public:
   size_t len = 0;
 };
 
+enum Error { OK, BAD };
+
 enum {
-  s_near = 1 << 0,
-  s_const = 1 << 1,
-  s_volatile = 1 << 2,
-  s_far = 1 << 3,
-  s_huge = 1 << 4,
-  s_unaligned = 1 << 5,
-  s_restrict = 1 << 6,
+  Near = 1 << 0,
+  Const = 1 << 1,
+  Volatile = 1 << 2,
+  Far = 1 << 3,
+  Huge = 1 << 4,
+  Unaligned = 1 << 5,
+  Restrict = 1 << 6,
 };
 
-typedef enum : uint8_t {
-  t_unknown,
-  t_void,
-  t_bool,
-  t_char,
-  t_schar,
-  t_uchar,
-  t_short,
-  t_ushort,
-  t_int,
-  t_uint,
-  t_long,
-  t_ulong,
-  t_llong,
-  t_ullong,
-  t_wchar,
-  t_float,
-  t_double,
-  t_ldouble,
-  t_m64,
-  t_m128,
-  t_m128d,
-  t_m128i,
-  t_m256,
-  t_m256d,
-  t_m256i,
-  t_m512,
-  t_m512d,
-  t_m512i,
-  t_varargs,
-} PrimTy;
+enum PrimTy : uint8_t {
+  Unknown,
+  Void,
+  Bool,
+  Char,
+  Schar,
+  Uchar,
+  Short,
+  Ushort,
+  Int,
+  Uint,
+  Long,
+  Ulong,
+  Llong,
+  Ullong,
+  Wchar,
+  Float,
+  Double,
+  Ldouble,
+  M64,
+  M128,
+  M128d,
+  M128i,
+  M256,
+  M256d,
+  M256i,
+  M512,
+  M512d,
+  M512i,
+  Varargs,
+};
 
-struct type {
+struct Type {
   PrimTy prim;
   uint8_t sclass = 0;
   bool is_function = false;
   string name;
 
   // if is_function == true
-  std::vector<struct type *> paramty{6};
+  std::vector<struct Type *> params{6};
 };
-
-static std::string to_string(error &err) {
-  if (err == error::ok)
-    return "OK";
-  return "BAD";
-}
 
 namespace {
 class Demangler {
@@ -129,19 +123,19 @@ public:
   void parse();
   std::string str();
 
-  error err = error::ok;
+  Error error = OK;
 
 private:
   PrimTy read_type();
 
-  type *alloc() { return type_buffer + type_index++; }
+  Type *alloc() { return type_buffer + type_index++; }
 
   string input;
 
   string symbol;
-  type ty;
+  Type type;
 
-  type type_buffer[100];
+  Type type_buffer[100];
   size_t type_index = 0;
 };
 } // namespace
@@ -149,12 +143,12 @@ private:
 void Demangler::parse() {
   if (!input.startswith("?")) {
     symbol = input;
-    ty.prim = t_unknown;
+    type.prim = Unknown;
   }
 
   ssize_t name_len = input.find("@@");
   if (name_len < 0) {
-    err = error::bad;
+    error = BAD;
     return;
   }
   symbol = input.substr(1, name_len);
@@ -162,7 +156,7 @@ void Demangler::parse() {
 
   if (input.startswith("3")) {
     input = input.substr(1);
-    ty.prim = read_type();
+    type.prim = read_type();
   }
 }
 
@@ -172,20 +166,20 @@ PrimTy Demangler::read_type() {
     PrimTy prim;
   } Pattern;
 
-  Pattern patterns[] = {{"X", t_void},           {"_N", t_bool},
-                        {"D", t_char},           {"C", t_schar},
-                        {"E", t_uchar},          {"F", t_short},
-                        {"int", t_ushort},       {"H", t_int},
-                        {"I", t_uint},           {"J", t_long},
-                        {"int", t_ulong},        {"_J", t_llong},
-                        {"_K", t_ullong},        {"_W", t_wchar},
-                        {"M", t_float},          {"N", t_double},
-                        {"ldouble", t_ldouble},  {"T__m64@@", t_m64},
-                        {"T__m128@@", t_m128},   {"U__m128d@@", t_m128d},
-                        {"T__m128i@@", t_m128i}, {"T__m256@@", t_m256},
-                        {"U__m256d@@", t_m256d}, {"T__m256i@@", t_m256i},
-                        {"T__m512@@", t_m512},   {"U__m512d@@", t_m512d},
-                        {"T__m512i@@", t_m512i}, {"Z", t_varargs}};
+  Pattern patterns[] = {{"X", Void},           {"_N", Bool},
+                        {"D", Char},           {"C", Schar},
+                        {"E", Uchar},          {"F", Short},
+                        {"int", Ushort},       {"H", Int},
+                        {"I", Uint},           {"J", Long},
+                        {"int", Ulong},        {"_J", Llong},
+                        {"_K", Ullong},        {"_W", Wchar},
+                        {"M", Float},          {"N", Double},
+                        {"ldouble", Ldouble},  {"T__m64@@", M64},
+                        {"T__m128@@", M128},   {"U__m128d@@", M128d},
+                        {"T__m128i@@", M128i}, {"T__m256@@", M256},
+                        {"U__m256d@@", M256d}, {"T__m256i@@", M256i},
+                        {"T__m512@@", M512},   {"U__m512d@@", M512d},
+                        {"T__m512i@@", M512i}, {"Z", Varargs}};
 
   for (Pattern &p : patterns) {
     if (!input.startswith(p.code))
@@ -194,73 +188,73 @@ PrimTy Demangler::read_type() {
     return p.prim;
   }
 
-  err = error::bad;
-  return t_void;
+  error = BAD;
+  return Void;
 }
 
 std::string Demangler::str() {
-  assert(err == error::ok);
-  if (ty.is_function)
+  assert(error == OK);
+  if (type.is_function)
     return "<function>";
 
-  switch (ty.prim) {
-  case t_unknown:
+  switch (type.prim) {
+  case Unknown:
     return symbol.str();
-  case t_void:
+  case Void:
     return "void " + symbol.str();
-  case t_bool:
+  case Bool:
     return "bool " + symbol.str();
-  case t_char:
+  case Char:
     return "char " + symbol.str();
-  case t_schar:
+  case Schar:
     return "schar " + symbol.str();
-  case t_uchar:
+  case Uchar:
     return "uchar " + symbol.str();
-  case t_short:
+  case Short:
     return "short " + symbol.str();
-  case t_ushort:
+  case Ushort:
     return "ushort " + symbol.str();
-  case t_int:
+  case Int:
     return "int " + symbol.str();
-  case t_uint:
+  case Uint:
     return "uint " + symbol.str();
-  case t_long:
+  case Long:
     return "long " + symbol.str();
-  case t_ulong:
+  case Ulong:
     return "ulong " + symbol.str();
-  case t_llong:
+  case Llong:
     return "llong " + symbol.str();
-  case t_ullong:
+  case Ullong:
     return "ullong " + symbol.str();
-  case t_wchar:
+  case Wchar:
     return "wchar " + symbol.str();
-  case t_float:
+  case Float:
     return "float " + symbol.str();
-  case t_double:
+  case Double:
     return "double " + symbol.str();
-  case t_ldouble:
+  case Ldouble:
     return "ldouble " + symbol.str();
-  case t_m64:
+  case M64:
     return "m64 " + symbol.str();
-  case t_m128:
+  case M128:
     return "m128 " + symbol.str();
-  case t_m128d:
+  case M128d:
     return "m128d " + symbol.str();
-  case t_m128i:
+  case M128i:
     return "m128i " + symbol.str();
-  case t_m256:
+  case M256:
     return "m256 " + symbol.str();
-  case t_m256d:
+  case M256d:
     return "m256d " + symbol.str();
-  case t_m256i:
+  case M256i:
     return "m256i " + symbol.str();
-  case t_m512:
+  case M512:
     return "m512 " + symbol.str();
-  case t_m512d:
+  case M512d:
     return "m512d " + symbol.str();
-  case t_m512i:
+  case M512i:
     return "m512i " + symbol.str();
-  case t_varargs:
+  case Varargs:
     return "... " + symbol.str();
   }
   return "";
@@ -274,9 +268,9 @@ int main(int argc, char **argv) {
 
   Demangler d(argv[1], strlen(argv[1]));
   d.parse();
-  if (d.err != error::ok) {
-    std::cerr << to_string(d.err) << "\n";
-    return 0;
+  if (d.error != OK) {
+    std::cerr << "BAD\n";
+    return 1;
   }
 
   std::cout << d.str() << '\n';
