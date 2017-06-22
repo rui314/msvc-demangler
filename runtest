@@ -1,0 +1,8 @@
+#!/bin/bash
+expect() {
+  actual="`./undname $1`"
+  [[ "$actual" == "$2" ]] || { echo "$2 expected, but got $actual"; exit 1; }
+}
+
+expect '?x@@3HA' 'int x'
+echo OK
