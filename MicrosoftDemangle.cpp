@@ -184,7 +184,7 @@ int Demangler::read_number() {
   for (; i < input.len; ++i) {
     char c = input.p[i];
     if (c == '@') {
-      input = input.substr(i + 1);
+      input.trim(i + 1);
       return neg ? -ret : ret;
     }
     if ('A' <= c && c <= 'P') {
@@ -249,7 +249,7 @@ void Demangler::read_prim_type(Type &ty) {
 
   for (Pattern &p : patterns) {
     if (input.consume(p.code)) {
-      input = input.substr(p.code.size());
+      input.trim(p.code.size());
       ty.prim = p.prim;
       return;
     }
