@@ -76,6 +76,7 @@ enum {
 
 enum PrimTy : uint8_t {
   Unknown,
+  Ptr,
   Void,
   Bool,
   Char,
@@ -110,7 +111,7 @@ struct Type {
   PrimTy prim;
   uint8_t sclass = 0;
   bool is_function = false;
-  string name;
+  Type *ptr = nullptr;
 
   // if is_function == true
   std::vector<struct Type *> params{6};
@@ -126,7 +127,8 @@ public:
   Error error = OK;
 
 private:
-  PrimTy read_type();
+  void read_type(Type &ty);
+  void read_prim_type(Type &ty);
 
   Type *alloc() { return type_buffer + type_index++; }
 
@@ -156,11 +158,23 @@ void Demangler::parse() {
 
   if (input.startswith("3")) {
     input = input.substr(1);
-    type.prim = read_type();
+    read_type(type);
   }
 }
 
-PrimTy Demangler::read_type() {
+void Demangler::read_type(Type &ty) {
+  if (input.startswith("PEA")) {
+    input = input.substr(3);
+    ty.prim = Ptr;
+    ty.ptr = alloc();
+    read_type(*ty.ptr);
+    return;
+  }
+
+  read_prim_type(ty);
+}
+
+void Demangler::read_prim_type(Type &ty) {
   typedef struct {
     std::string code;
     PrimTy prim;
@@ -185,11 +199,76 @@ PrimTy Demangler::read_type() {
     if (!input.startswith(p.code))
       continue;
     input = input.substr(p.code.size());
-    return p.prim;
+    ty.prim = p.prim;
+    return;
   }
 
   error = BAD;
-  return Void;
+}
+
+static std::string type2str(Type &type, const std::string &partial) {
+  switch (type.prim) {
+  case Unknown:
+    return partial;
+  case Ptr:
+    return type2str(*type.ptr, "*" + partial);
+  case Void:
+    return "void " + partial;
+  case Bool:
+    return "bool " + partial;
+  case Char:
+    return "char " + partial;
+  case Schar:
+    return "schar " + partial;
+  case Uchar:
+    return "uchar " + partial;
+  case Short:
+    return "short " + partial;
+  case Ushort:
+    return "ushort " + partial;
+  case Int:
+    return "int " + partial;
+  case Uint:
+    return "uint " + partial;
+  case Long:
+    return "long " + partial;
+  case Ulong:
+    return "ulong " + partial;
+  case Llong:
+    return "llong " + partial;
+  case Ullong:
+    return "ullong " + partial;
+  case Wchar:
+    return "wchar " + partial;
+  case Float:
+    return "float " + partial;
+  case Double:
+    return "double " + partial;
+  case Ldouble:
+    return "ldouble " + partial;
+  case M64:
+    return "m64 " + partial;
+  case M128:
+    return "m128 " + partial;
+  case M128d:
+    return "m128d " + partial;
+  case M128i:
+    return "m128i " + partial;
+  case M256:
+    return "m256 " + partial;
+  case M256d:
+    return "m256d " + partial;
+  case M256i:
+    return "m256i " + partial;
+  case M512:
+    return "m512 " + partial;
+  case M512d:
+    return "m512d " + partial;
+  case M512i:
+    return "m512i " + partial;
+  case Varargs:
+    return "... " + partial;
+  }
 }
 
 std::string Demangler::str() {
@@ -197,67 +276,7 @@ std::string Demangler::str() {
   if (type.is_function)
     return "<function>";
 
-  switch (type.prim) {
-  case Unknown:
-    return symbol.str();
-  case Void:
-    return "void " + symbol.str();
-  case Bool:
-    return "bool " + symbol.str();
-  case Char:
-    return "char " + symbol.str();
-  case Schar:
-    return "schar " + symbol.str();
-  case Uchar:
-    return "uchar " + symbol.str();
-  case Short:
-    return "short " + symbol.str();
-  case Ushort:
-    return "ushort " + symbol.str();
-  case Int:
-    return "int " + symbol.str();
-  case Uint:
-    return "uint " + symbol.str();
-  case Long:
-    return "long " + symbol.str();
-  case Ulong:
-    return "ulong " + symbol.str();
-  case Llong:
-    return "llong " + symbol.str();
-  case Ullong:
-    return "ullong " + symbol.str();
-  case Wchar:
-    return "wchar " + symbol.str();
-  case Float:
-    return "float " + symbol.str();
-  case Double:
-    return "double " + symbol.str();
-  case Ldouble:
-    return "ldouble " + symbol.str();
-  case M64:
-    return "m64 " + symbol.str();
-  case M128:
-    return "m128 " + symbol.str();
-  case M128d:
-    return "m128d " + symbol.str();
-  case M128i:
-    return "m128i " + symbol.str();
-  case M256:
-    return "m256 " + symbol.str();
-  case M256d:
-    return "m256d " + symbol.str();
-  case M256i:
-    return "m256i " + symbol.str();
-  case M512:
-    return "m512 " + symbol.str();
-  case M512d:
-    return "m512d " + symbol.str();
-  case M512i:
-    return "m512i " + symbol.str();
-  case Varargs:
-    return "... " + symbol.str();
-  }
-  return "";
+  return type2str(type, symbol.str());
 }
 
 int main(int argc, char **argv) {
