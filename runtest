@@ -6,4 +6,8 @@ expect() {
 
 expect '?x@@3HA' 'int x'
 expect '?x@@3PEAHEA' 'int *x'
+expect '?x@@3PEAPEAHEA' 'int **x'
+expect '?x@@3PEAY02HEA' 'int (*x)[3]'
+expect '?x@@3PEAY124HEA' 'int (*x)[3][5]'
+expect '?x@@3PEAY1NKM@5HEA' 'int (*x)[3500][6]'
 echo OK

@@ -35,12 +35,10 @@ public:
     return true;
   }
 
-  bool consume(const std::string &s) {
-    return consume(s.data(), s.size());
-  }
+  bool consume(const std::string &s) { return consume(s.data(), s.size()); }
 
   ssize_t find(char c) const {
-    for (ssize_t i = 0; i < len; i++)
+    for (ssize_t i = 0; i < len; ++i)
       if (p[i] == c)
         return i;
     return -1;
@@ -51,10 +49,16 @@ public:
     if (slen > len)
       return -1;
 
-    for (size_t i = 0; i < len - slen; i++)
+    for (size_t i = 0; i < len - slen; ++i)
       if (strncmp(p + i, s, slen) == 0)
         return i;
     return -1;
+  }
+
+  void trim(size_t n) {
+    assert(n <= len);
+    p += n;
+    len -= n;
   }
 
   string substr(size_t start, ssize_t end = -1) const {
@@ -65,7 +69,7 @@ public:
   size_t len = 0;
 };
 
-enum Error { OK, BAD };
+enum Error { OK, BAD, BAD_NUMBER };
 
 enum {
   Near = 1 << 0,
@@ -80,6 +84,7 @@ enum {
 enum PrimTy : uint8_t {
   Unknown,
   Ptr,
+  Array,
   Void,
   Bool,
   Char,
@@ -115,6 +120,7 @@ struct Type {
   uint8_t sclass = 0;
   bool is_function = false;
   Type *ptr = nullptr;
+  int32_t len;
 
   // if is_function == true
   std::vector<struct Type *> params{6};
@@ -130,6 +136,7 @@ public:
   Error error = OK;
 
 private:
+  int read_number();
   void read_type(Type &ty);
   void read_prim_type(Type &ty);
 
@@ -157,10 +164,37 @@ void Demangler::parse() {
     return;
   }
   symbol = input.substr(0, name_len);
-  input = input.substr(name_len + 2);
+  input.trim(name_len + 2);
 
   if (input.consume("3"))
     read_type(type);
+}
+
+int Demangler::read_number() {
+  bool neg = input.consume("?");
+
+  if (0 < input.len && '0' <= *input.p && *input.p <= '9') {
+    int32_t ret = *input.p - '0' + 1;
+    input.trim(1);
+    return neg ? -ret : ret;
+  }
+
+  size_t i = 0;
+  int32_t ret = 0;
+  for (; i < input.len; ++i) {
+    char c = input.p[i];
+    if (c == '@') {
+      input = input.substr(i + 1);
+      return neg ? -ret : ret;
+    }
+    if ('A' <= c && c <= 'P') {
+      ret = (ret << 4) + (c - 'A');
+      continue;
+    }
+    break;
+  }
+  error = BAD_NUMBER;
+  return 0;
 }
 
 void Demangler::read_type(Type &ty) {
@@ -168,6 +202,24 @@ void Demangler::read_type(Type &ty) {
     ty.prim = Ptr;
     ty.ptr = alloc();
     read_type(*ty.ptr);
+    return;
+  }
+
+  if (input.consume("Y")) {
+    int dimension = read_number();
+    if (dimension <= 0) {
+      error = BAD;
+      return;
+    }
+
+    Type *tp = &ty;
+    for (int i = 0; i < dimension; ++i) {
+      tp->prim = Array;
+      tp->len = read_number();
+      tp->ptr = alloc();
+      tp = tp->ptr;
+    }
+    read_type(*tp);
     return;
   }
 
@@ -212,6 +264,12 @@ static std::string type2str(Type &type, const std::string &partial) {
     return partial;
   case Ptr:
     return type2str(*type.ptr, "*" + partial);
+  case Array: {
+    std::string s = partial;
+    if (partial.size() > 0 && partial[0] == '*')
+      s = "(" + partial + ")";
+    return type2str(*type.ptr, s + "[" + std::to_string(type.len) + "]");
+  }
   case Void:
     return "void " + partial;
   case Bool:
