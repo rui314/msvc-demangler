@@ -18,14 +18,14 @@
 #include <utility>
 #include <vector>
 
-class string {
+class String {
 public:
-  string() = default;
-  string(const string &other) = default;
-  string(const std::string &s) : p(s.data()), len(s.size()) {}
-  string(const char *p) : p(p), len(strlen(p)) {}
-  string(const char *p, const char *end) : p(p), len(end - p) {}
-  template <size_t N> string(const char (&p)[N]) : p(p), len(N - 1) {}
+  String() = default;
+  String(const String &other) = default;
+  String(const std::string &s) : p(s.data()), len(s.size()) {}
+  String(const char *p) : p(p), len(strlen(p)) {}
+  String(const char *p, const char *end) : p(p), len(end - p) {}
+  template <size_t N> String(const char (&p)[N]) : p(p), len(N - 1) {}
 
   std::string str() const { return {p, p + len}; }
 
@@ -60,7 +60,7 @@ public:
     len -= n;
   }
 
-  string substr(size_t start, ssize_t end = -1) const {
+  String substr(size_t start, ssize_t end = -1) const {
     return {p + start, p + (end == -1 ? len : end)};
   }
 
@@ -140,7 +140,7 @@ struct Type {
   int32_t len;
 
   // if prim is one of (Struct, Union, Class, Enum).
-  string name;
+  String name;
 
   // if is_function == true
   std::vector<struct Type *> params;
@@ -161,16 +161,16 @@ private:
   void read_func_type(Type &ty);
 
   int read_number();
-  string read_string();
+  String read_string();
   void read_prim_type(Type &ty);
   void read_calling_conv(Type &ty);
   int8_t read_storage_class();
 
   Type *alloc() { return type_buffer + type_index++; }
 
-  string input;
+  String input;
 
-  string symbol;
+  String symbol;
   Type type;
 
   Type type_buffer[100];
@@ -219,13 +219,13 @@ int Demangler::read_number() {
   return 0;
 }
 
-string Demangler::read_string() {
+String Demangler::read_string() {
   ssize_t len = input.find("@@");
   if (len < 0) {
     status = BAD;
     return "";
   }
-  string ret = input.substr(0, len);
+  String ret = input.substr(0, len);
   input.trim(len + 2);
   return ret;
 }
@@ -390,12 +390,12 @@ void Demangler::read_prim_type(Type &ty) {
   status = BAD;
 }
 
-static void push_front(std::vector<string> &vec, const string &s) {
+static void push_front(std::vector<String> &vec, const String &s) {
   vec.insert(vec.begin(), s);
 }
 
-static std::vector<string> atsign_to_colons(string s) {
-  std::vector<string> vec;
+static std::vector<String> atsign_to_colons(String s) {
+  std::vector<String> vec;
   for (;;) {
     if (!vec.empty())
       vec.push_back("::");
@@ -410,7 +410,7 @@ static std::vector<string> atsign_to_colons(string s) {
   return vec;
 }
 
-static void type2str(Type &type, std::vector<string> &partial,
+static void type2str(Type &type, std::vector<String> &partial,
                      std::vector<std::string> &buf) {
   if (type.is_function) {
     if (partial[0].startswith('*')) {
@@ -418,7 +418,7 @@ static void type2str(Type &type, std::vector<string> &partial,
       partial.push_back(")");
     }
 
-    std::vector<string> retty = {""};
+    std::vector<String> retty = {""};
     type2str(*type.ptr, retty, buf);
     partial.insert(partial.begin(), retty.begin(), retty.end());
 
@@ -427,7 +427,7 @@ static void type2str(Type &type, std::vector<string> &partial,
       if (i != 0)
         partial.push_back(",");
 
-      std::vector<string> paramty = {""};
+      std::vector<String> paramty = {""};
       type2str(*type.params[i], paramty, buf);
       partial.insert(partial.end(), paramty.begin(), paramty.end());
     }
@@ -470,7 +470,7 @@ static void type2str(Type &type, std::vector<string> &partial,
     push_front(partial, "class");
     return;
   case Enum: {
-    std::vector<string> name = atsign_to_colons(type.name);
+    std::vector<String> name = atsign_to_colons(type.name);
     partial.insert(partial.begin(), name.begin(), name.end());
     push_front(partial, "enum");
     return;
@@ -565,12 +565,12 @@ static void type2str(Type &type, std::vector<string> &partial,
 std::string Demangler::str() {
   assert(status == OK);
 
-  std::vector<string> partial = atsign_to_colons(symbol);
+  std::vector<String> partial = atsign_to_colons(symbol);
   std::vector<std::string> buf;
   type2str(type, partial, buf);
 
   partial.erase(std::remove_if(partial.begin(), partial.end(),
-                               [](string &s) { return s.empty(); }),
+                               [](String &s) { return s.empty(); }),
                 partial.end());
 
   std::string ret;
