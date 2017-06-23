@@ -488,11 +488,27 @@ static void type2str(Type &type, std::vector<string> &partial,
   }
 }
 
+static void atsign_to_ns(std::vector<string> &vec, string s) {
+  for (;;) {
+    if (!vec.empty())
+      vec.push_back("::");
+    ssize_t pos = s.find("@");
+    if (pos == -1)
+      break;
+    vec.push_back(s.substr(0, pos));
+    s.trim(pos + 1);
+  }
+  vec.push_back(s);
+
+  std::reverse(vec.begin(), vec.end());
+}
+
 std::string Demangler::str() {
   assert(error == OK);
 
   std::vector<string> partial;
-  partial.push_back(symbol);
+  atsign_to_ns(partial, symbol);
+
   std::vector<std::string> buf;
   type2str(type, partial, buf);
 
