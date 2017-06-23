@@ -44,13 +44,12 @@ public:
 
   bool consume(const std::string &s) { return consume(s.data(), s.size()); }
 
-  ssize_t find(const char *s) const {
-    size_t slen = strlen(s);
-    if (slen > len)
+  ssize_t find(const std::string &s) const {
+    if (s.size() > len)
       return -1;
 
-    for (size_t i = 0; i < len - slen; ++i)
-      if (strncmp(p + i, s, slen) == 0)
+    for (size_t i = 0; i < len - s.size(); ++i)
+      if (strncmp(p + i, s.data(), s.size()) == 0)
         return i;
     return -1;
   }
@@ -142,15 +141,16 @@ struct Type {
   uint8_t sclass = 0;
 
   bool is_function = false;
+  uint8_t calling_conv;
+
   Type *ptr = nullptr;
   int32_t len;
 
   // if prim is one of (Struct, Union, Class, Enum).
   String name;
 
-  // if is_function == true
+  // function or template parameters
   std::vector<struct Type *> params;
-  uint8_t calling_conv;
 };
 
 static std::vector<String> atsign_to_colons(String s) {
@@ -186,6 +186,7 @@ private:
 
   int read_number();
   String read_string();
+  String read_until(const std::string &s);
   void read_prim_type(Type &ty);
   void read_calling_conv(Type &ty);
   int8_t read_storage_class();
@@ -253,13 +254,17 @@ int Demangler::read_number() {
 }
 
 String Demangler::read_string() {
-  ssize_t len = input.find("@@");
+  return read_until("@@");
+}
+
+String Demangler::read_until(const std::string &delim) {
+  ssize_t len = input.find(delim);
   if (len < 0) {
     status = BAD;
     return "";
   }
   String ret = input.substr(0, len);
-  input.trim(len + 2);
+  input.trim(len + delim.size());
   return ret;
 }
 
@@ -337,7 +342,17 @@ void Demangler::read_var_type(Type &ty) {
 
   if (input.consume("V")) {
     ty.prim = Class;
-    ty.name = read_string();
+
+    if (input.consume("?$")) {
+      ty.name = read_until("@");
+      while (status == OK && !input.consume("@")) {
+        Type *tp = alloc();
+        read_var_type(*tp);
+        ty.params.push_back(tp);
+      }
+    } else {
+      ty.name = read_string();
+    }
     return;
   }
 
@@ -512,10 +527,22 @@ void Stringer::type2str(Type &type, std::vector<String> &v) {
     v.insert(v.begin(), type.name);
     v.insert(v.begin(), "union");
     break;
-  case Class:
-    v.insert(v.begin(), type.name);
-    v.insert(v.begin(), "class");
+  case Class: {
+    std::vector<String> vec = {"class", type.name};
+    if (!type.params.empty()) {
+      vec.push_back("<");
+      for (size_t i = 0; i < type.params.size(); ++i) {
+        if (i != 0)
+          vec.push_back(",");
+        std::vector<String> tmp = {""};
+        type2str(*type.params[i], tmp);
+        vec.insert(vec.end(), tmp.begin(), tmp.end());
+      }
+      vec.push_back(">");
+    }
+    v.insert(v.begin(), vec.begin(), vec.end());
     break;
+  }
   case Enum: {
     std::vector<String> name = atsign_to_colons(type.name);
     v.insert(v.begin(), name.begin(), name.end());
