@@ -94,6 +94,12 @@ enum PrimTy : uint8_t {
   Unknown,
   Ptr,
   Array,
+
+  Struct,
+  Union,
+  Class,
+  Enum,
+
   Void,
   Bool,
   Char,
@@ -132,6 +138,9 @@ struct Type {
   Type *ptr = nullptr;
   int32_t len;
 
+  // if prim is one of (Struct, Union, Class, Enum).
+  string name;
+
   // if is_function == true
   std::vector<struct Type *> params;
   uint8_t calling_conv;
@@ -151,6 +160,7 @@ private:
   void read_func_type(Type &ty);
 
   int read_number();
+  string read_string();
   void read_prim_type(Type &ty);
   void read_calling_conv(Type &ty);
   int8_t read_storage_class();
@@ -173,13 +183,7 @@ void Demangler::parse() {
     type.prim = Unknown;
   }
 
-  ssize_t name_len = input.find("@@");
-  if (name_len < 0) {
-    error = BAD;
-    return;
-  }
-  symbol = input.substr(0, name_len);
-  input.trim(name_len + 2);
+  symbol = read_string();
 
   if (input.consume("3"))
     read_var_type(type);
@@ -212,6 +216,17 @@ int Demangler::read_number() {
   }
   error = BAD_NUMBER;
   return 0;
+}
+
+string Demangler::read_string() {
+  ssize_t len = input.find("@@");
+  if (len < 0) {
+    error = BAD;
+    return "";
+  }
+  string ret = input.substr(0, len);
+  input.trim(len + 2);
+  return ret;
 }
 
 void Demangler::read_func_type(Type &ty) {
@@ -274,6 +289,30 @@ int8_t Demangler::read_storage_class() {
 }
 
 void Demangler::read_var_type(Type &ty) {
+  if (input.consume("T")) {
+    ty.prim = Union;
+    ty.name = read_string();
+    return;
+  }
+
+  if (input.consume("U")) {
+    ty.prim = Struct;
+    ty.name = read_string();
+    return;
+  }
+
+  if (input.consume("V")) {
+    ty.prim = Class;
+    ty.name = read_string();
+    return;
+  }
+
+  if (input.consume("W4")) {
+    ty.prim = Enum;
+    ty.name = read_string();
+    return;
+  }
+
   if (input.consume("PEA")) {
     ty.prim = Ptr;
     ty.ptr = alloc();
@@ -354,6 +393,22 @@ static void push_front(std::vector<string> &vec, const string &s) {
   vec.insert(vec.begin(), s);
 }
 
+static std::vector<string> atsign_to_colons(string s) {
+  std::vector<string> vec;
+  for (;;) {
+    if (!vec.empty())
+      vec.push_back("::");
+    ssize_t pos = s.find("@");
+    if (pos == -1)
+      break;
+    vec.push_back(s.substr(0, pos));
+    s.trim(pos + 1);
+  }
+  vec.push_back(s);
+  std::reverse(vec.begin(), vec.end());
+  return vec;
+}
+
 static void type2str(Type &type, std::vector<string> &partial,
                      std::vector<std::string> &buf) {
   if (type.is_function) {
@@ -399,6 +454,24 @@ static void type2str(Type &type, std::vector<string> &partial,
     partial.push_back("]");
 
     type2str(*type.ptr, partial, buf);
+    return;
+  }
+  case Struct:
+    push_front(partial, type.name);
+    push_front(partial, "struct");
+    return;
+  case Union:
+    push_front(partial, type.name);
+    push_front(partial, "union");
+    return;
+  case Class:
+    push_front(partial, type.name);
+    push_front(partial, "class");
+    return;
+  case Enum: {
+    std::vector<string> name = atsign_to_colons(type.name);
+    partial.insert(partial.begin(), name.begin(), name.end());
+    push_front(partial, "enum");
     return;
   }
   case Void:
@@ -488,27 +561,10 @@ static void type2str(Type &type, std::vector<string> &partial,
   }
 }
 
-static void atsign_to_ns(std::vector<string> &vec, string s) {
-  for (;;) {
-    if (!vec.empty())
-      vec.push_back("::");
-    ssize_t pos = s.find("@");
-    if (pos == -1)
-      break;
-    vec.push_back(s.substr(0, pos));
-    s.trim(pos + 1);
-  }
-  vec.push_back(s);
-
-  std::reverse(vec.begin(), vec.end());
-}
-
 std::string Demangler::str() {
   assert(error == OK);
 
-  std::vector<string> partial;
-  atsign_to_ns(partial, symbol);
-
+  std::vector<string> partial = atsign_to_colons(symbol);
   std::vector<std::string> buf;
   type2str(type, partial, buf);
 

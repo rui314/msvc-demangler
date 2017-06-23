@@ -17,4 +17,10 @@ expect '?x@@3P6AHMNH@ZEA' 'int(*x)(float,double,int)'
 
 expect '?x@ns@@3HA' 'int ns::x'
 
+expect '?x@@3PEAUty@@EA' 'struct ty*x'
+expect '?x@@3PEATty@@EA' 'union ty*x'
+expect '?x@@3PEAUty@@EA' 'struct ty*x'
+expect '?x@@3PEAW4ty@@EA' 'enum ty*x'
+expect '?x@@3PEAVty@@EA' 'class ty*x'
+
 echo OK
