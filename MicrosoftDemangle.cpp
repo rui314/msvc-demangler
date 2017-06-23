@@ -285,13 +285,13 @@ int main(int argc, char **argv) {
     exit(1);
   }
 
-  Demangler d(argv[1], strlen(argv[1]));
-  d.parse();
-  if (d.error != OK) {
+  Demangler demangler(argv[1], strlen(argv[1]));
+  demangler.parse();
+  if (demangler.error != OK) {
     std::cerr << "BAD\n";
     return 1;
   }
 
-  std::cout << d.str() << '\n';
+  std::cout << demangler.str() << '\n';
   return 0;
 }
