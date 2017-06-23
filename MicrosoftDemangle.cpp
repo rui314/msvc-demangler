@@ -411,37 +411,37 @@ static void type2str(Type &type, std::vector<string> &partial,
     push_front(partial, "char");
     return;
   case Schar:
-    push_front(partial, "schar");
+    push_front(partial, "signed char");
     return;
   case Uchar:
-    push_front(partial, "uchar");
+    push_front(partial, "unsigned char");
     return;
   case Short:
     push_front(partial, "short");
     return;
   case Ushort:
-    push_front(partial, "ushort");
+    push_front(partial, "unsigned short");
     return;
   case Int:
     push_front(partial, "int");
     return;
   case Uint:
-    push_front(partial, "uint");
+    push_front(partial, "unsigned int");
     return;
   case Long:
     push_front(partial, "long");
     return;
   case Ulong:
-    push_front(partial, "ulong");
+    push_front(partial, "unsigned long");
     return;
   case Llong:
-    push_front(partial, "llong");
+    push_front(partial, "long long");
     return;
   case Ullong:
-    push_front(partial, "ullong");
+    push_front(partial, "unsigned long long");
     return;
   case Wchar:
-    push_front(partial, "wchar");
+    push_front(partial, "wchar_t");
     return;
   case Float:
     push_front(partial, "float");
@@ -450,40 +450,40 @@ static void type2str(Type &type, std::vector<string> &partial,
     push_front(partial, "double");
     return;
   case Ldouble:
-    push_front(partial, "ldouble");
+    push_front(partial, "long double");
     return;
   case M64:
-    push_front(partial, "m64");
+    push_front(partial, "__m64");
     return;
   case M128:
-    push_front(partial, "m128");
+    push_front(partial, "__m128");
     return;
   case M128d:
-    push_front(partial, "m128d");
+    push_front(partial, "__m128d");
     return;
   case M128i:
-    push_front(partial, "m128i");
+    push_front(partial, "__m128i");
     return;
   case M256:
-    push_front(partial, "m256");
+    push_front(partial, "__m256");
     return;
   case M256d:
-    push_front(partial, "m256d");
+    push_front(partial, "__m256d");
     return;
   case M256i:
-    push_front(partial, "m256i");
+    push_front(partial, "__m256i");
     return;
   case M512:
-    push_front(partial, "m512");
+    push_front(partial, "__m512");
     return;
   case M512d:
-    push_front(partial, "m512d");
+    push_front(partial, "__m512d");
     return;
   case M512i:
-    push_front(partial, "m512i");
+    push_front(partial, "__m512i");
     return;
   case Varargs:
-    push_front(partial, "... ");
+    push_front(partial, "...");
     return;
   }
 }
