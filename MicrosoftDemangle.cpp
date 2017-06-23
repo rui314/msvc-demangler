@@ -333,6 +333,10 @@ void Demangler::read_prim_type(Type &ty) {
   error = BAD;
 }
 
+static void push_front(std::vector<string> &vec, const string &s) {
+  vec.insert(vec.begin(), s);
+}
+
 static void type2str(Type &type, std::vector<string> &partial,
                      std::vector<std::string> &buf) {
   if (type.is_function) {
@@ -357,13 +361,13 @@ static void type2str(Type &type, std::vector<string> &partial,
   case Unknown:
     return;
   case Ptr: {
-    partial.insert(partial.begin(), "*");
+    push_front(partial, "*");
     type2str(*type.ptr, partial, buf);
     return;
   }
   case Array: {
     if (partial[0].startswith('*')) {
-      partial.insert(partial.begin(), "(");
+      push_front(partial, "(");
       partial.push_back(")");
     }
 
@@ -376,88 +380,88 @@ static void type2str(Type &type, std::vector<string> &partial,
     return;
   }
   case Void:
-    partial.insert(partial.begin(), "void");
+    push_front(partial, "void");
     return;
   case Bool:
-    partial.insert(partial.begin(), "bool");
+    push_front(partial, "bool");
     return;
   case Char:
-    partial.insert(partial.begin(), "char");
+    push_front(partial, "char");
     return;
   case Schar:
-    partial.insert(partial.begin(), "schar");
+    push_front(partial, "schar");
     return;
   case Uchar:
-    partial.insert(partial.begin(), "uchar");
+    push_front(partial, "uchar");
     return;
   case Short:
-    partial.insert(partial.begin(), "short");
+    push_front(partial, "short");
     return;
   case Ushort:
-    partial.insert(partial.begin(), "ushort");
+    push_front(partial, "ushort");
     return;
   case Int:
-    partial.insert(partial.begin(), "int");
+    push_front(partial, "int");
     return;
   case Uint:
-    partial.insert(partial.begin(), "uint");
+    push_front(partial, "uint");
     return;
   case Long:
-    partial.insert(partial.begin(), "long");
+    push_front(partial, "long");
     return;
   case Ulong:
-    partial.insert(partial.begin(), "ulong");
+    push_front(partial, "ulong");
     return;
   case Llong:
-    partial.insert(partial.begin(), "llong");
+    push_front(partial, "llong");
     return;
   case Ullong:
-    partial.insert(partial.begin(), "ullong");
+    push_front(partial, "ullong");
     return;
   case Wchar:
-    partial.insert(partial.begin(), "wchar");
+    push_front(partial, "wchar");
     return;
   case Float:
-    partial.insert(partial.begin(), "float");
+    push_front(partial, "float");
     return;
   case Double:
-    partial.insert(partial.begin(), "double");
+    push_front(partial, "double");
     return;
   case Ldouble:
-    partial.insert(partial.begin(), "ldouble");
+    push_front(partial, "ldouble");
     return;
   case M64:
-    partial.insert(partial.begin(), "m64");
+    push_front(partial, "m64");
     return;
   case M128:
-    partial.insert(partial.begin(), "m128");
+    push_front(partial, "m128");
     return;
   case M128d:
-    partial.insert(partial.begin(), "m128d");
+    push_front(partial, "m128d");
     return;
   case M128i:
-    partial.insert(partial.begin(), "m128i");
+    push_front(partial, "m128i");
     return;
   case M256:
-    partial.insert(partial.begin(), "m256");
+    push_front(partial, "m256");
     return;
   case M256d:
-    partial.insert(partial.begin(), "m256d");
+    push_front(partial, "m256d");
     return;
   case M256i:
-    partial.insert(partial.begin(), "m256i");
+    push_front(partial, "m256i");
     return;
   case M512:
-    partial.insert(partial.begin(), "m512");
+    push_front(partial, "m512");
     return;
   case M512d:
-    partial.insert(partial.begin(), "m512d");
+    push_front(partial, "m512d");
     return;
   case M512i:
-    partial.insert(partial.begin(), "m512i");
+    push_front(partial, "m512i");
     return;
   case Varargs:
-    partial.insert(partial.begin(), "... ");
+    push_front(partial, "... ");
     return;
   }
 }
