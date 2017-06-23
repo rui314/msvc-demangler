@@ -23,6 +23,7 @@ public:
   string() = default;
   string(const string &other) = default;
   string(const std::string &s) : p(s.data()), len(s.size()) {}
+  string(const char *p) : p(p), len(strlen(p)) {}
   string(const char *p, const char *end) : p(p), len(end - p) {}
   template <size_t N> string(const char (&p)[N]) : p(p), len(N - 1) {}
 
