@@ -95,6 +95,7 @@ enum {
 // Types
 enum PrimTy : uint8_t {
   Unknown,
+  Function,
   Ptr,
   Array,
 
@@ -137,7 +138,6 @@ struct Type {
   PrimTy prim;
   uint8_t sclass = 0;
 
-  bool is_function = false;
   uint8_t calling_conv;
 
   Type *ptr = nullptr;
@@ -248,7 +248,7 @@ String Demangler::read_until(const std::string &delim) {
 }
 
 void Demangler::read_func_type(Type &ty) {
-  ty.is_function = true;
+  ty.prim = Function;
 
   read_calling_conv(ty);
   int8_t sclass = read_storage_class();
@@ -399,7 +399,7 @@ void Demangler::read_var_type(Type &ty) {
     ty.ptr = alloc();
 
     Type &fn = *ty.ptr;
-    fn.is_function = true;
+    fn.prim = Function;
     fn.ptr = alloc();
     read_var_type(*fn.ptr);
 
@@ -484,17 +484,15 @@ std::string Demangler::str() {
 }
 
 void Demangler::write_pre(Type &type) {
-  if (type.is_function) {
-    write_pre(*type.ptr);
-    return;
-  }
-
   switch (type.prim) {
   case Unknown:
     break;
+  case Function:
+    write_pre(*type.ptr);
+    return;
   case Ptr:
     write_pre(*type.ptr);
-    if (type.ptr->is_function || type.ptr->prim == Array)
+    if (type.ptr->prim == Function || type.ptr->prim == Array)
       os << "(";
     os << "*";
     break;
@@ -612,7 +610,7 @@ void Demangler::write_pre(Type &type) {
 }
 
 void Demangler::write_post(Type &type) {
-  if (type.is_function) {
+  if (type.prim == Function) {
     os << "(";
     write_params(type);
     os << ")";
@@ -620,7 +618,7 @@ void Demangler::write_post(Type &type) {
   }
 
   if (type.prim == Ptr) {
-    if (type.ptr->is_function || type.ptr->prim == Array)
+    if (type.ptr->prim == Function || type.ptr->prim == Array)
       os << ")";
     write_post(*type.ptr);
     return;
