@@ -154,7 +154,7 @@ public:
   void parse();
   std::string str();
 
-  Error error = OK;
+  Error status = OK;
 
 private:
   void read_var_type(Type &ty);
@@ -215,14 +215,14 @@ int Demangler::read_number() {
     }
     break;
   }
-  error = BAD_NUMBER;
+  status = BAD_NUMBER;
   return 0;
 }
 
 string Demangler::read_string() {
   ssize_t len = input.find("@@");
   if (len < 0) {
-    error = BAD;
+    status = BAD;
     return "";
   }
   string ret = input.substr(0, len);
@@ -239,7 +239,7 @@ void Demangler::read_func_type(Type &ty) {
   read_var_type(*ty.ptr);
   ty.ptr->sclass = sclass;
 
-  while (error == OK && !input.empty() && !input.startswith('@')) {
+  while (status == OK && !input.empty() && !input.startswith('@')) {
     Type *tp = alloc();
     read_var_type(*tp);
     ty.params.push_back(tp);
@@ -260,7 +260,7 @@ void Demangler::read_calling_conv(Type &ty) {
   else if (input.consume("E"))
     ty.calling_conv = Regcall;
   else
-    error = BAD_CALLING_CONV;
+    status = BAD_CALLING_CONV;
 };
 
 int8_t Demangler::read_storage_class() {
@@ -324,7 +324,7 @@ void Demangler::read_var_type(Type &ty) {
   if (input.consume("Y")) {
     int dimension = read_number();
     if (dimension <= 0) {
-      error = BAD;
+      status = BAD;
       return;
     }
 
@@ -348,7 +348,7 @@ void Demangler::read_var_type(Type &ty) {
     fn.ptr = alloc();
     read_var_type(*fn.ptr);
 
-    while (error == OK && !input.consume("@Z")) {
+    while (status == OK && !input.consume("@Z")) {
       Type *tp = alloc();
       read_var_type(*tp);
       fn.params.push_back(tp);
@@ -387,7 +387,7 @@ void Demangler::read_prim_type(Type &ty) {
     }
   }
 
-  error = BAD;
+  status = BAD;
 }
 
 static void push_front(std::vector<string> &vec, const string &s) {
@@ -563,7 +563,7 @@ static void type2str(Type &type, std::vector<string> &partial,
 }
 
 std::string Demangler::str() {
-  assert(error == OK);
+  assert(status == OK);
 
   std::vector<string> partial = atsign_to_colons(symbol);
   std::vector<std::string> buf;
@@ -590,7 +590,7 @@ int main(int argc, char **argv) {
 
   Demangler demangler(argv[1], strlen(argv[1]));
   demangler.parse();
-  if (demangler.error != OK) {
+  if (demangler.status != OK) {
     std::cerr << "BAD\n";
     return 1;
   }
