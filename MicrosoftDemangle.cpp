@@ -161,10 +161,9 @@ public:
   std::string str();
 
   Error status = OK;
-  Type type;
-  String symbol;
 
 private:
+  // Parser
   void read_var_type(Type &ty);
   void read_func_type(Type &ty);
 
@@ -178,23 +177,17 @@ private:
   Type *alloc() { return type_buffer + type_index++; }
 
   String input;
-
+  Type type;
+  String symbol;
   Type type_buffer[100];
   size_t type_index = 0;
-};
 
-class Stringer {
-public:
-  Stringer(Demangler &d) : demangler(d) {}
-  std::string str();
-
-private:
+  // Writer
   void write_pre(Type &type);
   void write_post(Type &type);
   void write_params(Type &type);
   void write_name(String s);
 
-  Demangler &demangler;
   std::stringstream os;
 };
 } // namespace
@@ -442,15 +435,15 @@ void Demangler::read_prim_type(Type &ty) {
   status = BAD;
 }
 
-std::string Stringer::str() {
-  write_pre(demangler.type);
+std::string Demangler::str() {
+  write_pre(type);
   os << " ";
-  write_name(demangler.symbol);
-  write_post(demangler.type);
+  write_name(symbol);
+  write_post(type);
   return os.str();
 }
 
-void Stringer::write_pre(Type &type) {
+void Demangler::write_pre(Type &type) {
   if (type.is_function) {
     write_pre(*type.ptr);
     return;
@@ -577,7 +570,7 @@ void Stringer::write_pre(Type &type) {
     os << " const ";
 }
 
-void Stringer::write_post(Type &type) {
+void Demangler::write_post(Type &type) {
   if (type.is_function) {
     os << "(";
     write_params(type);
@@ -598,7 +591,7 @@ void Stringer::write_post(Type &type) {
   }
 }
 
-void Stringer::write_params(Type &type) {
+void Demangler::write_params(Type &type) {
   for (size_t i = 0; i < type.params.size(); ++i) {
     if (i != 0)
       os << ",";
@@ -607,7 +600,7 @@ void Stringer::write_params(Type &type) {
   }
 }
 
-void Stringer::write_name(String s) {
+void Demangler::write_name(String s) {
   size_t pos = s.len;
   bool sep = false;
 
@@ -640,6 +633,6 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  std::cout << Stringer(demangler).str() << '\n';
+  std::cout << demangler.str() << '\n';
   return 0;
 }
