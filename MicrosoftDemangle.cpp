@@ -22,7 +22,9 @@ class string {
 public:
   string() = default;
   string(const string &other) = default;
+  string(const std::string &s) : p(s.data()), len(s.size()) {}
   string(const char *p, const char *end) : p(p), len(end - p) {}
+  template <size_t N> string(const char (&p)[N]) : p(p), len(N - 1) {}
 
   std::string str() const { return {p, p + len}; }
 
@@ -331,93 +333,154 @@ void Demangler::read_prim_type(Type &ty) {
   error = BAD;
 }
 
-static std::string type2str(Type &type, const std::string &partial) {
+static void type2str(Type &type, std::vector<string> &partial,
+                     std::vector<std::string> &buf) {
   if (type.is_function) {
-    std::string s = type2str(*type.ptr, "") + partial + "(";
+    std::vector<string> retty = {""};
+    type2str(*type.ptr, retty, buf);
+    partial.insert(partial.begin(), retty.begin(), retty.end());
 
-    bool first = true;
-    for (Type *ty : type.params) {
-      if (!first)
-        s += ",";
-      first = false;
-      s += type2str(*ty, "");
+    partial.push_back("(");
+    for (size_t i = 0; i < type.params.size(); ++i) {
+      if (i != 0)
+        partial.push_back(",");
+
+      std::vector<string> paramty = {""};
+      type2str(*type.params[i], paramty, buf);
+      partial.insert(partial.end(), paramty.begin(), paramty.end());
     }
-    return s + ")";
+    partial.push_back(")");
+    return;
   }
 
   switch (type.prim) {
   case Unknown:
-    return partial;
-  case Ptr:
-    return type2str(*type.ptr, "*" + partial);
+    return;
+  case Ptr: {
+    partial.insert(partial.begin(), "*");
+    type2str(*type.ptr, partial, buf);
+    return;
+  }
   case Array: {
-    std::string s = partial;
-    if (partial.size() > 0 && partial[0] == '*')
-      s = "(" + partial + ")";
-    return type2str(*type.ptr, s + "[" + std::to_string(type.len) + "]");
+    if (partial[0].startswith('*')) {
+      partial.insert(partial.begin(), "(");
+      partial.push_back(")");
+    }
+
+    partial.push_back("[");
+    buf.push_back(std::to_string(type.len));
+    partial.push_back(buf.back());
+    partial.push_back("]");
+
+    type2str(*type.ptr, partial, buf);
+    return;
   }
   case Void:
-    return "void " + partial;
+    partial.insert(partial.begin(), "void");
+    return;
   case Bool:
-    return "bool " + partial;
+    partial.insert(partial.begin(), "bool");
+    return;
   case Char:
-    return "char " + partial;
+    partial.insert(partial.begin(), "char");
+    return;
   case Schar:
-    return "schar " + partial;
+    partial.insert(partial.begin(), "schar");
+    return;
   case Uchar:
-    return "uchar " + partial;
+    partial.insert(partial.begin(), "uchar");
+    return;
   case Short:
-    return "short " + partial;
+    partial.insert(partial.begin(), "short");
+    return;
   case Ushort:
-    return "ushort " + partial;
+    partial.insert(partial.begin(), "ushort");
+    return;
   case Int:
-    return "int " + partial;
+    partial.insert(partial.begin(), "int");
+    return;
   case Uint:
-    return "uint " + partial;
+    partial.insert(partial.begin(), "uint");
+    return;
   case Long:
-    return "long " + partial;
+    partial.insert(partial.begin(), "long");
+    return;
   case Ulong:
-    return "ulong " + partial;
+    partial.insert(partial.begin(), "ulong");
+    return;
   case Llong:
-    return "llong " + partial;
+    partial.insert(partial.begin(), "llong");
+    return;
   case Ullong:
-    return "ullong " + partial;
+    partial.insert(partial.begin(), "ullong");
+    return;
   case Wchar:
-    return "wchar " + partial;
+    partial.insert(partial.begin(), "wchar");
+    return;
   case Float:
-    return "float " + partial;
+    partial.insert(partial.begin(), "float");
+    return;
   case Double:
-    return "double " + partial;
+    partial.insert(partial.begin(), "double");
+    return;
   case Ldouble:
-    return "ldouble " + partial;
+    partial.insert(partial.begin(), "ldouble");
+    return;
   case M64:
-    return "m64 " + partial;
+    partial.insert(partial.begin(), "m64");
+    return;
   case M128:
-    return "m128 " + partial;
+    partial.insert(partial.begin(), "m128");
+    return;
   case M128d:
-    return "m128d " + partial;
+    partial.insert(partial.begin(), "m128d");
+    return;
   case M128i:
-    return "m128i " + partial;
+    partial.insert(partial.begin(), "m128i");
+    return;
   case M256:
-    return "m256 " + partial;
+    partial.insert(partial.begin(), "m256");
+    return;
   case M256d:
-    return "m256d " + partial;
+    partial.insert(partial.begin(), "m256d");
+    return;
   case M256i:
-    return "m256i " + partial;
+    partial.insert(partial.begin(), "m256i");
+    return;
   case M512:
-    return "m512 " + partial;
+    partial.insert(partial.begin(), "m512");
+    return;
   case M512d:
-    return "m512d " + partial;
+    partial.insert(partial.begin(), "m512d");
+    return;
   case M512i:
-    return "m512i " + partial;
+    partial.insert(partial.begin(), "m512i");
+    return;
   case Varargs:
-    return "... " + partial;
+    partial.insert(partial.begin(), "... ");
+    return;
   }
 }
 
 std::string Demangler::str() {
   assert(error == OK);
-  return type2str(type, symbol.str());
+
+  std::vector<string> partial;
+  partial.push_back(symbol);
+  std::vector<std::string> buf;
+  type2str(type, partial, buf);
+
+  partial.erase(std::remove_if(partial.begin(), partial.end(),
+                               [](string &s) { return s.empty(); }),
+                partial.end());
+
+  std::string ret;
+  for (size_t i = 0; i < partial.size(); ++i) {
+    if (i > 0 && isalpha(*partial[i - 1].p) && isalpha(*partial[i].p))
+      ret += " ";
+    ret += partial[i].str();
+  }
+  return ret;
 }
 
 int main(int argc, char **argv) {
