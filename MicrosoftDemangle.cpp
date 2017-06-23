@@ -14,6 +14,7 @@
 #include <cstring>
 #include <iostream>
 #include <numeric>
+#include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
@@ -67,6 +68,11 @@ public:
   const char *p = nullptr;
   size_t len = 0;
 };
+
+std::ostream &operator<<(std::ostream &os, const String s) {
+  os.write(s.p, s.len);
+  return os;
+}
 
 enum Error { OK, BAD, BAD_NUMBER, BAD_CALLING_CONV };
 
@@ -573,13 +579,13 @@ std::string Demangler::str() {
                                [](String &s) { return s.empty(); }),
                 partial.end());
 
-  std::string ret;
+  std::stringstream ss;
   for (size_t i = 0; i < partial.size(); ++i) {
     if (i > 0 && isalpha(*partial[i - 1].p) && isalpha(*partial[i].p))
-      ret += " ";
-    ret += partial[i].str();
+      ss << " ";
+    ss << partial[i];
   }
-  return ret;
+  return ss.str();
 }
 
 int main(int argc, char **argv) {
