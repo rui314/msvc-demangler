@@ -478,7 +478,6 @@ PrimTy Demangler::read_prim_type() {
 
 std::string Demangler::str() {
   write_pre(type);
-  write_space();
   write_name(symbol);
   write_post(type);
   return os.str();
@@ -643,6 +642,8 @@ void Demangler::write_params(Type &type) {
 }
 
 void Demangler::write_name(String s) {
+  write_space();
+
   size_t pos = s.len;
   bool sep = false;
 
