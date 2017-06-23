@@ -170,7 +170,7 @@ private:
   int read_number();
   String read_string();
   String read_until(const std::string &s);
-  void read_prim_type(Type &ty);
+  PrimTy read_prim_type();
   void read_calling_conv(Type &ty);
   int8_t read_storage_class();
 
@@ -402,38 +402,69 @@ void Demangler::read_var_type(Type &ty) {
     return;
   }
 
-  read_prim_type(ty);
+  ty.prim = read_prim_type();
 }
 
-void Demangler::read_prim_type(Type &ty) {
-  typedef struct {
-    std::string code;
-    PrimTy prim;
-  } Pattern;
-
-  Pattern patterns[] = {{"X", Void},           {"_N", Bool},
-                        {"D", Char},           {"C", Schar},
-                        {"E", Uchar},          {"F", Short},
-                        {"int", Ushort},       {"H", Int},
-                        {"I", Uint},           {"J", Long},
-                        {"int", Ulong},        {"_J", Llong},
-                        {"_K", Ullong},        {"_W", Wchar},
-                        {"M", Float},          {"N", Double},
-                        {"ldouble", Ldouble},  {"T__m64@@", M64},
-                        {"T__m128@@", M128},   {"U__m128d@@", M128d},
-                        {"T__m128i@@", M128i}, {"T__m256@@", M256},
-                        {"U__m256d@@", M256d}, {"T__m256i@@", M256i},
-                        {"T__m512@@", M512},   {"U__m512d@@", M512d},
-                        {"T__m512i@@", M512i}, {"Z", Varargs}};
-
-  for (Pattern &p : patterns) {
-    if (input.consume(p.code)) {
-      ty.prim = p.prim;
-      return;
-    }
-  }
+PrimTy Demangler::read_prim_type() {
+  if (input.consume("X"))
+    return Void;
+  if (input.consume("_N"))
+    return Bool;
+  if (input.consume("D"))
+    return Char;
+  if (input.consume("C"))
+    return Schar;
+  if (input.consume("E"))
+    return Uchar;
+  if (input.consume("F"))
+    return Short;
+  if (input.consume("int"))
+    return Ushort;
+  if (input.consume("H"))
+    return Int;
+  if (input.consume("I"))
+    return Uint;
+  if (input.consume("J"))
+    return Long;
+  if (input.consume("int"))
+    return Ulong;
+  if (input.consume("_J"))
+    return Llong;
+  if (input.consume("_K"))
+    return Ullong;
+  if (input.consume("_W"))
+    return Wchar;
+  if (input.consume("M"))
+    return Float;
+  if (input.consume("N"))
+    return Double;
+  if (input.consume("ldouble"))
+    return Ldouble;
+  if (input.consume("T__m64@@"))
+    return M64;
+  if (input.consume("T__m128@@"))
+    return M128;
+  if (input.consume("U__m128d@@"))
+    return M128d;
+  if (input.consume("T__m128i@@"))
+    return M128i;
+  if (input.consume("T__m256@@"))
+    return M256;
+  if (input.consume("U__m256d@@"))
+    return M256d;
+  if (input.consume("T__m256i@@"))
+    return M256i;
+  if (input.consume("T__m512@@"))
+    return M512;
+  if (input.consume("U__m512d@@"))
+    return M512d;
+  if (input.consume("T__m512i@@"))
+    return M512i;
+  if (input.consume("Z"))
+    return Varargs;
 
   status = BAD;
+  return Unknown;
 }
 
 std::string Demangler::str() {
