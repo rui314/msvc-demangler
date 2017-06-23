@@ -11,4 +11,6 @@ expect '?x@@3PEAY02HEA' 'int(*x)[3]'
 expect '?x@@3PEAY124HEA' 'int(*x)[3][5]'
 expect '?x@@3PEAY1NKM@5HEA' 'int(*x)[3500][6]'
 expect '?x@@YAXMH@Z' 'void x(float,int)'
+expect '?x@@YAXMH@Z' 'void x(float,int)'
+expect '?x@@3P6AHMNH@ZEA' 'int(*x)(float,double,int)'
 echo OK

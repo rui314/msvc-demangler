@@ -183,7 +183,7 @@ void Demangler::parse() {
 
   if (input.consume("3"))
     read_var_type(type);
-  if (input.consume("Y"))
+  else if (input.consume("Y"))
     read_func_type(type);
 }
 
@@ -299,6 +299,23 @@ void Demangler::read_var_type(Type &ty) {
     return;
   }
 
+  if (input.consume("P6A")) {
+    ty.prim = Ptr;
+    ty.ptr = alloc();
+
+    Type &fn = *ty.ptr;
+    fn.is_function = true;
+    fn.ptr = alloc();
+    read_var_type(*fn.ptr);
+
+    while (error == OK && !input.consume("@Z")) {
+      Type *tp = alloc();
+      read_var_type(*tp);
+      fn.params.push_back(tp);
+    }
+    return;
+  }
+
   read_prim_type(ty);
 }
 
@@ -340,6 +357,11 @@ static void push_front(std::vector<string> &vec, const string &s) {
 static void type2str(Type &type, std::vector<string> &partial,
                      std::vector<std::string> &buf) {
   if (type.is_function) {
+    if (partial[0].startswith('*')) {
+      push_front(partial, "(");
+      partial.push_back(")");
+    }
+
     std::vector<string> retty = {""};
     type2str(*type.ptr, retty, buf);
     partial.insert(partial.begin(), retty.begin(), retty.end());
