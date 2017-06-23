@@ -26,6 +26,9 @@ public:
 
   std::string str() const { return {p, p + len}; }
 
+  bool startswith(char c) { return len > 0 && *p == c; }
+  bool empty() const { return len == 0; }
+
   bool consume(const char *s, ssize_t slen = -1) {
     slen = (slen == -1) ? strlen(s) : slen;
     if (slen > len || strncmp(p, s, slen) != 0)
@@ -62,18 +65,29 @@ public:
   size_t len = 0;
 };
 
-enum Error { OK, BAD, BAD_NUMBER };
+enum Error { OK, BAD, BAD_NUMBER, BAD_CALLING_CONV };
 
+// Storage classes
 enum {
-  Near = 1 << 0,
-  Const = 1 << 1,
-  Volatile = 1 << 2,
-  Far = 1 << 3,
-  Huge = 1 << 4,
-  Unaligned = 1 << 5,
-  Restrict = 1 << 6,
+  Const = 1 << 0,
+  Volatile = 1 << 1,
+  Far = 1 << 2,
+  Huge = 1 << 3,
+  Unaligned = 1 << 4,
+  Restrict = 1 << 5,
 };
 
+// Calling conventions
+enum {
+  Cdecl,
+  Pascal,
+  Thiscall,
+  Stdcall,
+  Fastcall,
+  Regcall,
+};
+
+// Types
 enum PrimTy : uint8_t {
   Unknown,
   Ptr,
@@ -111,12 +125,14 @@ enum PrimTy : uint8_t {
 struct Type {
   PrimTy prim;
   uint8_t sclass = 0;
+
   bool is_function = false;
   Type *ptr = nullptr;
   int32_t len;
 
   // if is_function == true
-  std::vector<struct Type *> params{6};
+  std::vector<struct Type *> params;
+  uint8_t calling_conv;
 };
 
 namespace {
@@ -129,9 +145,13 @@ public:
   Error error = OK;
 
 private:
+  void read_var_type(Type &ty);
+  void read_func_type(Type &ty);
+
   int read_number();
-  void read_type(Type &ty);
   void read_prim_type(Type &ty);
+  void read_calling_conv(Type &ty);
+  int8_t read_storage_class();
 
   Type *alloc() { return type_buffer + type_index++; }
 
@@ -160,7 +180,9 @@ void Demangler::parse() {
   input.trim(name_len + 2);
 
   if (input.consume("3"))
-    read_type(type);
+    read_var_type(type);
+  if (input.consume("Y"))
+    read_func_type(type);
 }
 
 int Demangler::read_number() {
@@ -190,11 +212,70 @@ int Demangler::read_number() {
   return 0;
 }
 
-void Demangler::read_type(Type &ty) {
+void Demangler::read_func_type(Type &ty) {
+  ty.is_function = true;
+
+  read_calling_conv(ty);
+  int8_t sclass = read_storage_class();
+  ty.ptr = alloc();
+  read_var_type(*ty.ptr);
+  ty.ptr->sclass = sclass;
+
+  while (error == OK && !input.empty() && !input.startswith('@')) {
+    Type *tp = alloc();
+    read_var_type(*tp);
+    ty.params.push_back(tp);
+  }
+}
+
+void Demangler::read_calling_conv(Type &ty) {
+  if (input.consume("A"))
+    ty.calling_conv = Cdecl;
+  else if (input.consume("C"))
+    ty.calling_conv = Pascal;
+  else if (input.consume("E"))
+    ty.calling_conv = Thiscall;
+  else if (input.consume("G"))
+    ty.calling_conv = Stdcall;
+  else if (input.consume("I"))
+    ty.calling_conv = Fastcall;
+  else if (input.consume("E"))
+    ty.calling_conv = Regcall;
+  else
+    error = BAD_CALLING_CONV;
+};
+
+int8_t Demangler::read_storage_class() {
+  if (input.consume("A"))
+    return 0;
+  if (input.consume("B"))
+    return Const;
+  if (input.consume("C"))
+    return Volatile;
+  if (input.consume("D"))
+    return Const | Volatile;
+  if (input.consume("E"))
+    return Far;
+  if (input.consume("F"))
+    return Const | Far;
+  if (input.consume("G"))
+    return Volatile | Far;
+  if (input.consume("H"))
+    return Const | Volatile | Far;
+  if (input.consume("I"))
+    return Huge;
+  if (input.consume("F"))
+    return Unaligned;
+  if (input.consume("I"))
+    return Restrict;
+  return 0;
+}
+
+void Demangler::read_var_type(Type &ty) {
   if (input.consume("PEA")) {
     ty.prim = Ptr;
     ty.ptr = alloc();
-    read_type(*ty.ptr);
+    read_var_type(*ty.ptr);
     return;
   }
 
@@ -212,7 +293,7 @@ void Demangler::read_type(Type &ty) {
       tp->ptr = alloc();
       tp = tp->ptr;
     }
-    read_type(*tp);
+    read_var_type(*tp);
     return;
   }
 
@@ -242,7 +323,6 @@ void Demangler::read_prim_type(Type &ty) {
 
   for (Pattern &p : patterns) {
     if (input.consume(p.code)) {
-      input.trim(p.code.size());
       ty.prim = p.prim;
       return;
     }
@@ -252,6 +332,19 @@ void Demangler::read_prim_type(Type &ty) {
 }
 
 static std::string type2str(Type &type, const std::string &partial) {
+  if (type.is_function) {
+    std::string s = type2str(*type.ptr, "") + partial + "(";
+
+    bool first = true;
+    for (Type *ty : type.params) {
+      if (!first)
+        s += ",";
+      first = false;
+      s += type2str(*ty, "");
+    }
+    return s + ")";
+  }
+
   switch (type.prim) {
   case Unknown:
     return partial;
@@ -324,9 +417,6 @@ static std::string type2str(Type &type, const std::string &partial) {
 
 std::string Demangler::str() {
   assert(error == OK);
-  if (type.is_function)
-    return "<function>";
-
   return type2str(type, symbol.str());
 }
 
