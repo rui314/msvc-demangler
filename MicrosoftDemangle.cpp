@@ -153,6 +153,22 @@ struct Type {
   uint8_t calling_conv;
 };
 
+static std::vector<String> atsign_to_colons(String s) {
+  std::vector<String> vec;
+  for (;;) {
+    if (!vec.empty())
+      vec.push_back("::");
+    ssize_t pos = s.find("@");
+    if (pos == -1)
+      break;
+    vec.push_back(s.substr(0, pos));
+    s.trim(pos + 1);
+  }
+  vec.push_back(s);
+  std::reverse(vec.begin(), vec.end());
+  return vec;
+}
+
 namespace {
 class Demangler {
 public:
@@ -161,6 +177,8 @@ public:
   std::string str();
 
   Error status = OK;
+  Type type;
+  String symbol;
 
 private:
   void read_var_type(Type &ty);
@@ -176,11 +194,20 @@ private:
 
   String input;
 
-  String symbol;
-  Type type;
-
   Type type_buffer[100];
   size_t type_index = 0;
+};
+
+class Stringer {
+public:
+  Stringer(Demangler &d) : demangler(d) {}
+  std::string str();
+
+private:
+  void type2str(Type &type, std::vector<String> &v);
+
+  Demangler &demangler;
+  std::vector<std::string> buffer;
 };
 } // namespace
 
@@ -396,48 +423,43 @@ void Demangler::read_prim_type(Type &ty) {
   status = BAD;
 }
 
-static void push_front(std::vector<String> &vec, const String &s) {
-  vec.insert(vec.begin(), s);
-}
+std::string Stringer::str() {
+  std::vector<String> v = atsign_to_colons(demangler.symbol);
+  type2str(demangler.type, v);
+  v.erase(
+      std::remove_if(v.begin(), v.end(), [](String &s) { return s.empty(); }),
+      v.end());
 
-static std::vector<String> atsign_to_colons(String s) {
-  std::vector<String> vec;
-  for (;;) {
-    if (!vec.empty())
-      vec.push_back("::");
-    ssize_t pos = s.find("@");
-    if (pos == -1)
-      break;
-    vec.push_back(s.substr(0, pos));
-    s.trim(pos + 1);
+  std::stringstream ss;
+  for (size_t i = 0; i < v.size(); ++i) {
+    if (i > 0 && isalpha(*v[i - 1].p) && isalpha(*v[i].p))
+      ss << " ";
+    ss << v[i];
   }
-  vec.push_back(s);
-  std::reverse(vec.begin(), vec.end());
-  return vec;
+  return ss.str();
 }
 
-static void type2str(Type &type, std::vector<String> &partial,
-                     std::vector<std::string> &buf) {
+void Stringer::type2str(Type &type, std::vector<String> &v) {
   if (type.is_function) {
-    if (partial[0].startswith('*')) {
-      push_front(partial, "(");
-      partial.push_back(")");
+    if (v[0].startswith('*')) {
+      v.insert(v.begin(), "(");
+      v.push_back(")");
     }
 
     std::vector<String> retty = {""};
-    type2str(*type.ptr, retty, buf);
-    partial.insert(partial.begin(), retty.begin(), retty.end());
+    type2str(*type.ptr, retty);
+    v.insert(v.begin(), retty.begin(), retty.end());
 
-    partial.push_back("(");
+    v.push_back("(");
     for (size_t i = 0; i < type.params.size(); ++i) {
       if (i != 0)
-        partial.push_back(",");
+        v.push_back(",");
 
       std::vector<String> paramty = {""};
-      type2str(*type.params[i], paramty, buf);
-      partial.insert(partial.end(), paramty.begin(), paramty.end());
+      type2str(*type.params[i], paramty);
+      v.insert(v.end(), paramty.begin(), paramty.end());
     }
-    partial.push_back(")");
+    v.push_back(")");
     return;
   }
 
@@ -445,147 +467,127 @@ static void type2str(Type &type, std::vector<String> &partial,
   case Unknown:
     return;
   case Ptr: {
-    push_front(partial, "*");
-    type2str(*type.ptr, partial, buf);
+    v.insert(v.begin(), "*");
+    type2str(*type.ptr, v);
     return;
   }
   case Array: {
-    if (partial[0].startswith('*')) {
-      push_front(partial, "(");
-      partial.push_back(")");
+    if (v[0].startswith('*')) {
+      v.insert(v.begin(), "(");
+      v.push_back(")");
     }
 
-    partial.push_back("[");
-    buf.push_back(std::to_string(type.len));
-    partial.push_back(buf.back());
-    partial.push_back("]");
+    v.push_back("[");
+    buffer.push_back(std::to_string(type.len));
+    v.push_back(buffer.back());
+    v.push_back("]");
 
-    type2str(*type.ptr, partial, buf);
+    type2str(*type.ptr, v);
     return;
   }
   case Struct:
-    push_front(partial, type.name);
-    push_front(partial, "struct");
+    v.insert(v.begin(), type.name);
+    v.insert(v.begin(), "struct");
     return;
   case Union:
-    push_front(partial, type.name);
-    push_front(partial, "union");
+    v.insert(v.begin(), type.name);
+    v.insert(v.begin(), "union");
     return;
   case Class:
-    push_front(partial, type.name);
-    push_front(partial, "class");
+    v.insert(v.begin(), type.name);
+    v.insert(v.begin(), "class");
     return;
   case Enum: {
     std::vector<String> name = atsign_to_colons(type.name);
-    partial.insert(partial.begin(), name.begin(), name.end());
-    push_front(partial, "enum");
+    v.insert(v.begin(), name.begin(), name.end());
+    v.insert(v.begin(), "enum");
     return;
   }
   case Void:
-    push_front(partial, "void");
+    v.insert(v.begin(), "void");
     return;
   case Bool:
-    push_front(partial, "bool");
+    v.insert(v.begin(), "bool");
     return;
   case Char:
-    push_front(partial, "char");
+    v.insert(v.begin(), "char");
     return;
   case Schar:
-    push_front(partial, "signed char");
+    v.insert(v.begin(), "signed char");
     return;
   case Uchar:
-    push_front(partial, "unsigned char");
+    v.insert(v.begin(), "unsigned char");
     return;
   case Short:
-    push_front(partial, "short");
+    v.insert(v.begin(), "short");
     return;
   case Ushort:
-    push_front(partial, "unsigned short");
+    v.insert(v.begin(), "unsigned short");
     return;
   case Int:
-    push_front(partial, "int");
+    v.insert(v.begin(), "int");
     return;
   case Uint:
-    push_front(partial, "unsigned int");
+    v.insert(v.begin(), "unsigned int");
     return;
   case Long:
-    push_front(partial, "long");
+    v.insert(v.begin(), "long");
     return;
   case Ulong:
-    push_front(partial, "unsigned long");
+    v.insert(v.begin(), "unsigned long");
     return;
   case Llong:
-    push_front(partial, "long long");
+    v.insert(v.begin(), "long long");
     return;
   case Ullong:
-    push_front(partial, "unsigned long long");
+    v.insert(v.begin(), "unsigned long long");
     return;
   case Wchar:
-    push_front(partial, "wchar_t");
+    v.insert(v.begin(), "wchar_t");
     return;
   case Float:
-    push_front(partial, "float");
+    v.insert(v.begin(), "float");
     return;
   case Double:
-    push_front(partial, "double");
+    v.insert(v.begin(), "double");
     return;
   case Ldouble:
-    push_front(partial, "long double");
+    v.insert(v.begin(), "long double");
     return;
   case M64:
-    push_front(partial, "__m64");
+    v.insert(v.begin(), "__m64");
     return;
   case M128:
-    push_front(partial, "__m128");
+    v.insert(v.begin(), "__m128");
     return;
   case M128d:
-    push_front(partial, "__m128d");
+    v.insert(v.begin(), "__m128d");
     return;
   case M128i:
-    push_front(partial, "__m128i");
+    v.insert(v.begin(), "__m128i");
     return;
   case M256:
-    push_front(partial, "__m256");
+    v.insert(v.begin(), "__m256");
     return;
   case M256d:
-    push_front(partial, "__m256d");
+    v.insert(v.begin(), "__m256d");
     return;
   case M256i:
-    push_front(partial, "__m256i");
+    v.insert(v.begin(), "__m256i");
     return;
   case M512:
-    push_front(partial, "__m512");
+    v.insert(v.begin(), "__m512");
     return;
   case M512d:
-    push_front(partial, "__m512d");
+    v.insert(v.begin(), "__m512d");
     return;
   case M512i:
-    push_front(partial, "__m512i");
+    v.insert(v.begin(), "__m512i");
     return;
   case Varargs:
-    push_front(partial, "...");
+    v.insert(v.begin(), "...");
     return;
   }
-}
-
-std::string Demangler::str() {
-  assert(status == OK);
-
-  std::vector<String> partial = atsign_to_colons(symbol);
-  std::vector<std::string> buf;
-  type2str(type, partial, buf);
-
-  partial.erase(std::remove_if(partial.begin(), partial.end(),
-                               [](String &s) { return s.empty(); }),
-                partial.end());
-
-  std::stringstream ss;
-  for (size_t i = 0; i < partial.size(); ++i) {
-    if (i > 0 && isalpha(*partial[i - 1].p) && isalpha(*partial[i].p))
-      ss << " ";
-    ss << partial[i];
-  }
-  return ss.str();
 }
 
 int main(int argc, char **argv) {
@@ -601,6 +603,6 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  std::cout << demangler.str() << '\n';
+  std::cout << Stringer(demangler).str() << '\n';
   return 0;
 }
