@@ -26,14 +26,17 @@ public:
 
   std::string str() const { return {p, p + len}; }
 
-  bool startswith(const char *s) const {
-    size_t slen = strlen(s);
-    return slen <= len && strncmp(p, s, slen) == 0;
+  bool consume(const char *s, ssize_t slen = -1) {
+    slen = (slen == -1) ? strlen(s) : slen;
+    if (slen > len || strncmp(p, s, slen) != 0)
+      return false;
+    p += slen;
+    len -= slen;
+    return true;
   }
 
-  bool startswith(const std::string &s) const {
-    size_t slen = s.size();
-    return slen <= len && strncmp(p, s.data(), slen) == 0;
+  bool consume(const std::string &s) {
+    return consume(s.data(), s.size());
   }
 
   ssize_t find(char c) const {
@@ -143,7 +146,7 @@ private:
 } // namespace
 
 void Demangler::parse() {
-  if (!input.startswith("?")) {
+  if (!input.consume("?")) {
     symbol = input;
     type.prim = Unknown;
   }
@@ -153,18 +156,15 @@ void Demangler::parse() {
     error = BAD;
     return;
   }
-  symbol = input.substr(1, name_len);
+  symbol = input.substr(0, name_len);
   input = input.substr(name_len + 2);
 
-  if (input.startswith("3")) {
-    input = input.substr(1);
+  if (input.consume("3"))
     read_type(type);
-  }
 }
 
 void Demangler::read_type(Type &ty) {
-  if (input.startswith("PEA")) {
-    input = input.substr(3);
+  if (input.consume("PEA")) {
     ty.prim = Ptr;
     ty.ptr = alloc();
     read_type(*ty.ptr);
@@ -196,11 +196,11 @@ void Demangler::read_prim_type(Type &ty) {
                         {"T__m512i@@", M512i}, {"Z", Varargs}};
 
   for (Pattern &p : patterns) {
-    if (!input.startswith(p.code))
-      continue;
-    input = input.substr(p.code.size());
-    ty.prim = p.prim;
-    return;
+    if (input.consume(p.code)) {
+      input = input.substr(p.code.size());
+      ty.prim = p.prim;
+      return;
+    }
   }
 
   error = BAD;
