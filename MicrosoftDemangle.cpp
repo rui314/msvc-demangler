@@ -37,13 +37,6 @@ public:
 
   bool consume(const std::string &s) { return consume(s.data(), s.size()); }
 
-  ssize_t find(char c) const {
-    for (ssize_t i = 0; i < len; ++i)
-      if (p[i] == c)
-        return i;
-    return -1;
-  }
-
   ssize_t find(const char *s) const {
     size_t slen = strlen(s);
     if (slen > len)
