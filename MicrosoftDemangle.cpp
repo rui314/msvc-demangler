@@ -33,16 +33,13 @@ public:
   bool startswith(char c) { return len > 0 && *p == c; }
   bool empty() const { return len == 0; }
 
-  bool consume(const char *s, ssize_t slen = -1) {
-    slen = (slen == -1) ? strlen(s) : slen;
-    if (slen > len || strncmp(p, s, slen) != 0)
+  bool consume(const std::string &s) {
+    if (s.size() > len || strncmp(p, s.data(), s.size()) != 0)
       return false;
-    p += slen;
-    len -= slen;
+    p += s.size();
+    len -= s.size();
     return true;
   }
-
-  bool consume(const std::string &s) { return consume(s.data(), s.size()); }
 
   ssize_t find(const std::string &s) const {
     if (s.size() > len)
@@ -175,6 +172,7 @@ private:
   int8_t read_storage_class();
 
   Type *alloc() { return type_buffer + type_index++; }
+  bool consume(const std::string &s) { return input.consume(s); }
 
   String input;
   Type type;
@@ -194,21 +192,21 @@ private:
 } // namespace
 
 void Demangler::parse() {
-  if (!input.consume("?")) {
+  if (!consume("?")) {
     symbol = input;
     type.prim = Unknown;
   }
 
   symbol = read_string();
 
-  if (input.consume("3"))
+  if (consume("3"))
     read_var_type(type);
-  else if (input.consume("Y"))
+  else if (consume("Y"))
     read_func_type(type);
 }
 
 int Demangler::read_number() {
-  bool neg = input.consume("?");
+  bool neg = consume("?");
 
   if (0 < input.len && '0' <= *input.p && *input.p <= '9') {
     int32_t ret = *input.p - '0' + 1;
@@ -266,67 +264,67 @@ void Demangler::read_func_type(Type &ty) {
 }
 
 void Demangler::read_calling_conv(Type &ty) {
-  if (input.consume("A"))
+  if (consume("A"))
     ty.calling_conv = Cdecl;
-  else if (input.consume("C"))
+  else if (consume("C"))
     ty.calling_conv = Pascal;
-  else if (input.consume("E"))
+  else if (consume("E"))
     ty.calling_conv = Thiscall;
-  else if (input.consume("G"))
+  else if (consume("G"))
     ty.calling_conv = Stdcall;
-  else if (input.consume("I"))
+  else if (consume("I"))
     ty.calling_conv = Fastcall;
-  else if (input.consume("E"))
+  else if (consume("E"))
     ty.calling_conv = Regcall;
   else
     status = BAD_CALLING_CONV;
 };
 
 int8_t Demangler::read_storage_class() {
-  if (input.consume("A"))
+  if (consume("A"))
     return 0;
-  if (input.consume("B"))
+  if (consume("B"))
     return Const;
-  if (input.consume("C"))
+  if (consume("C"))
     return Volatile;
-  if (input.consume("D"))
+  if (consume("D"))
     return Const | Volatile;
-  if (input.consume("E"))
+  if (consume("E"))
     return Far;
-  if (input.consume("F"))
+  if (consume("F"))
     return Const | Far;
-  if (input.consume("G"))
+  if (consume("G"))
     return Volatile | Far;
-  if (input.consume("H"))
+  if (consume("H"))
     return Const | Volatile | Far;
-  if (input.consume("I"))
+  if (consume("I"))
     return Huge;
-  if (input.consume("F"))
+  if (consume("F"))
     return Unaligned;
-  if (input.consume("I"))
+  if (consume("I"))
     return Restrict;
   return 0;
 }
 
 void Demangler::read_var_type(Type &ty) {
-  if (input.consume("T")) {
+  if (consume("T")) {
     ty.prim = Union;
     ty.name = read_string();
     return;
   }
 
-  if (input.consume("U")) {
+  if (consume("U")) {
     ty.prim = Struct;
     ty.name = read_string();
     return;
   }
 
-  if (input.consume("V")) {
+  if (consume("V")) {
     ty.prim = Class;
 
-    if (input.consume("?$")) {
+    if (consume("?$")) {
       ty.name = read_until("@");
-      while (status == OK && !input.consume("@")) {
+      while (status == OK && !consume("@")) {
         Type *tp = alloc();
         read_var_type(*tp);
         ty.params.push_back(tp);
@@ -337,20 +335,20 @@ void Demangler::read_var_type(Type &ty) {
     return;
   }
 
-  if (input.consume("W4")) {
+  if (consume("W4")) {
     ty.prim = Enum;
     ty.name = read_string();
     return;
   }
 
-  if (input.consume("PEA")) {
+  if (consume("PEA")) {
     ty.prim = Ptr;
     ty.ptr = alloc();
     read_var_type(*ty.ptr);
     return;
   }
 
-  if (input.consume("PEB")) {
+  if (consume("PEB")) {
     ty.prim = Ptr;
     ty.ptr = alloc();
     read_var_type(*ty.ptr);
@@ -358,7 +356,7 @@ void Demangler::read_var_type(Type &ty) {
     return;
   }
 
-  if (input.consume("QEB")) {
+  if (consume("QEB")) {
     ty.prim = Ptr;
     ty.sclass = Const;
     ty.ptr = alloc();
@@ -367,7 +365,7 @@ void Demangler::read_var_type(Type &ty) {
     return;
   }
 
-  if (input.consume("Y")) {
+  if (consume("Y")) {
     int dimension = read_number();
     if (dimension <= 0) {
       status = BAD;
@@ -385,7 +383,7 @@ void Demangler::read_var_type(Type &ty) {
     return;
   }
 
-  if (input.consume("P6A")) {
+  if (consume("P6A")) {
     ty.prim = Ptr;
     ty.ptr = alloc();
 
@@ -394,7 +392,7 @@ void Demangler::read_var_type(Type &ty) {
     fn.ptr = alloc();
     read_var_type(*fn.ptr);
 
-    while (status == OK && !input.consume("@Z")) {
+    while (status == OK && !consume("@Z")) {
       Type *tp = alloc();
       read_var_type(*tp);
       fn.params.push_back(tp);
@@ -406,61 +404,61 @@ void Demangler::read_var_type(Type &ty) {
 }
 
 PrimTy Demangler::read_prim_type() {
-  if (input.consume("X"))
+  if (consume("X"))
     return Void;
-  if (input.consume("_N"))
+  if (consume("_N"))
     return Bool;
-  if (input.consume("D"))
+  if (consume("D"))
     return Char;
-  if (input.consume("C"))
+  if (consume("C"))
     return Schar;
-  if (input.consume("E"))
+  if (consume("E"))
     return Uchar;
-  if (input.consume("F"))
+  if (consume("F"))
     return Short;
-  if (input.consume("int"))
+  if (consume("int"))
     return Ushort;
-  if (input.consume("H"))
+  if (consume("H"))
     return Int;
-  if (input.consume("I"))
+  if (consume("I"))
     return Uint;
-  if (input.consume("J"))
+  if (consume("J"))
     return Long;
-  if (input.consume("int"))
+  if (consume("int"))
     return Ulong;
-  if (input.consume("_J"))
+  if (consume("_J"))
     return Llong;
-  if (input.consume("_K"))
+  if (consume("_K"))
     return Ullong;
-  if (input.consume("_W"))
+  if (consume("_W"))
     return Wchar;
-  if (input.consume("M"))
+  if (consume("M"))
     return Float;
-  if (input.consume("N"))
+  if (consume("N"))
     return Double;
-  if (input.consume("ldouble"))
+  if (consume("ldouble"))
     return Ldouble;
-  if (input.consume("T__m64@@"))
+  if (consume("T__m64@@"))
     return M64;
-  if (input.consume("T__m128@@"))
+  if (consume("T__m128@@"))
     return M128;
-  if (input.consume("U__m128d@@"))
+  if (consume("U__m128d@@"))
     return M128d;
-  if (input.consume("T__m128i@@"))
+  if (consume("T__m128i@@"))
     return M128i;
-  if (input.consume("T__m256@@"))
+  if (consume("T__m256@@"))
     return M256;
-  if (input.consume("U__m256d@@"))
+  if (consume("U__m256d@@"))
     return M256d;
-  if (input.consume("T__m256i@@"))
+  if (consume("T__m256i@@"))
     return M256i;
-  if (input.consume("T__m512@@"))
+  if (consume("T__m512@@"))
     return M512;
-  if (input.consume("U__m512d@@"))
+  if (consume("U__m512d@@"))
     return M512d;
-  if (input.consume("T__m512i@@"))
+  if (consume("T__m512i@@"))
     return M512i;
-  if (input.consume("Z"))
+  if (consume("Z"))
     return Varargs;
 
   status = BAD;
