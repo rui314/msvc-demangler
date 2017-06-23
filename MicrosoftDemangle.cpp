@@ -354,6 +354,23 @@ void Demangler::read_var_type(Type &ty) {
     return;
   }
 
+  if (input.consume("PEB")) {
+    ty.prim = Ptr;
+    ty.ptr = alloc();
+    read_var_type(*ty.ptr);
+    ty.ptr->sclass = Const;
+    return;
+  }
+
+  if (input.consume("QEB")) {
+    ty.prim = Ptr;
+    ty.sclass = Const;
+    ty.ptr = alloc();
+    read_var_type(*ty.ptr);
+    ty.ptr->sclass = Const;
+    return;
+  }
+
   if (input.consume("Y")) {
     int dimension = read_number();
     if (dimension <= 0) {
@@ -465,8 +482,10 @@ void Stringer::type2str(Type &type, std::vector<String> &v) {
 
   switch (type.prim) {
   case Unknown:
-    return;
+    break;
   case Ptr: {
+    if (type.sclass & Const)
+      v.insert(v.begin(), "const");
     v.insert(v.begin(), "*");
     type2str(*type.ptr, v);
     return;
@@ -483,111 +502,114 @@ void Stringer::type2str(Type &type, std::vector<String> &v) {
     v.push_back("]");
 
     type2str(*type.ptr, v);
-    return;
+    break;
   }
   case Struct:
     v.insert(v.begin(), type.name);
     v.insert(v.begin(), "struct");
-    return;
+    break;
   case Union:
     v.insert(v.begin(), type.name);
     v.insert(v.begin(), "union");
-    return;
+    break;
   case Class:
     v.insert(v.begin(), type.name);
     v.insert(v.begin(), "class");
-    return;
+    break;
   case Enum: {
     std::vector<String> name = atsign_to_colons(type.name);
     v.insert(v.begin(), name.begin(), name.end());
     v.insert(v.begin(), "enum");
-    return;
+    break;
   }
   case Void:
     v.insert(v.begin(), "void");
-    return;
+    break;
   case Bool:
     v.insert(v.begin(), "bool");
-    return;
+    break;
   case Char:
     v.insert(v.begin(), "char");
-    return;
+    break;
   case Schar:
     v.insert(v.begin(), "signed char");
-    return;
+    break;
   case Uchar:
     v.insert(v.begin(), "unsigned char");
-    return;
+    break;
   case Short:
     v.insert(v.begin(), "short");
-    return;
+    break;
   case Ushort:
     v.insert(v.begin(), "unsigned short");
-    return;
+    break;
   case Int:
     v.insert(v.begin(), "int");
-    return;
+    break;
   case Uint:
     v.insert(v.begin(), "unsigned int");
-    return;
+    break;
   case Long:
     v.insert(v.begin(), "long");
-    return;
+    break;
   case Ulong:
     v.insert(v.begin(), "unsigned long");
-    return;
+    break;
   case Llong:
     v.insert(v.begin(), "long long");
-    return;
+    break;
   case Ullong:
     v.insert(v.begin(), "unsigned long long");
-    return;
+    break;
   case Wchar:
     v.insert(v.begin(), "wchar_t");
-    return;
+    break;
   case Float:
     v.insert(v.begin(), "float");
-    return;
+    break;
   case Double:
     v.insert(v.begin(), "double");
-    return;
+    break;
   case Ldouble:
     v.insert(v.begin(), "long double");
-    return;
+    break;
   case M64:
     v.insert(v.begin(), "__m64");
-    return;
+    break;
   case M128:
     v.insert(v.begin(), "__m128");
-    return;
+    break;
   case M128d:
     v.insert(v.begin(), "__m128d");
-    return;
+    break;
   case M128i:
     v.insert(v.begin(), "__m128i");
-    return;
+    break;
   case M256:
     v.insert(v.begin(), "__m256");
-    return;
+    break;
   case M256d:
     v.insert(v.begin(), "__m256d");
-    return;
+    break;
   case M256i:
     v.insert(v.begin(), "__m256i");
-    return;
+    break;
   case M512:
     v.insert(v.begin(), "__m512");
-    return;
+    break;
   case M512d:
     v.insert(v.begin(), "__m512d");
-    return;
+    break;
   case M512i:
     v.insert(v.begin(), "__m512i");
-    return;
+    break;
   case Varargs:
     v.insert(v.begin(), "...");
-    return;
+    break;
   }
+
+  if (type.sclass & Const)
+    v.insert(v.begin(), "const");
 }
 
 int main(int argc, char **argv) {
