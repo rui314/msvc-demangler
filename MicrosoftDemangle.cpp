@@ -187,6 +187,7 @@ private:
   void write_post(Type &type);
   void write_params(Type &type);
   void write_name(String s);
+  void write_space();
 
   std::stringstream os;
 };
@@ -437,7 +438,7 @@ void Demangler::read_prim_type(Type &ty) {
 
 std::string Demangler::str() {
   write_pre(type);
-  os << " ";
+  write_space();
   write_name(symbol);
   write_post(type);
   return os.str();
@@ -566,8 +567,10 @@ void Demangler::write_pre(Type &type) {
     break;
   }
 
-  if (type.sclass & Const)
-    os << " const ";
+  if (type.sclass & Const) {
+    write_space();
+    os << "const";
+  }
 }
 
 void Demangler::write_post(Type &type) {
@@ -618,6 +621,12 @@ void Demangler::write_name(String s) {
   if (sep)
     os << "::";
   os.write(s.p, pos);
+}
+
+void Demangler::write_space() {
+  std::string s = os.str();
+  if (!s.empty() && isalpha(s.back()))
+    os << " ";
 }
 
 int main(int argc, char **argv) {

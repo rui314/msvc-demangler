@@ -5,31 +5,31 @@ expect() {
 }
 
 expect '?x@@3HA' 'int x'
-expect '?x@@3PEAHEA' 'int* x'
-expect '?x@@3PEAPEAHEA' 'int** x'
-expect '?x@@3PEAY02HEA' 'int(* x)[3]'
-expect '?x@@3PEAY124HEA' 'int(* x)[3][5]'
+expect '?x@@3PEAHEA' 'int*x'
+expect '?x@@3PEAPEAHEA' 'int**x'
+expect '?x@@3PEAY02HEA' 'int(*x)[3]'
+expect '?x@@3PEAY124HEA' 'int(*x)[3][5]'
 # expect '?x@@3PEAY02$$CBHEA' 'int const(*x)[3]'
-expect '?x@@3PEAEEA' 'unsigned char* x'
-expect '?x@@3PEAY1NKM@5HEA' 'int(* x)[3500][6]'
+expect '?x@@3PEAEEA' 'unsigned char*x'
+expect '?x@@3PEAY1NKM@5HEA' 'int(*x)[3500][6]'
 expect '?x@@YAXMH@Z' 'void x(float,int)'
 expect '?x@@YAXMH@Z' 'void x(float,int)'
-expect '?x@@3P6AHMNH@ZEA' 'int(* x)(float,double,int)'
+expect '?x@@3P6AHMNH@ZEA' 'int(*x)(float,double,int)'
 
 expect '?x@ns@@3HA' 'int ns::x'
 
 # Microsoft's undname returns "int const * const x" for this symbol.
 # I believe it's their bug.
-expect '?x@@3PEBHEB' 'int const * x'
+expect '?x@@3PEBHEB' 'int const*x'
 
-expect '?x@@3QEBHEB' 'int const * const  x'
+expect '?x@@3QEBHEB' 'int const*const x'
 
-expect '?x@@3PEAUty@@EA' 'struct ty* x'
-expect '?x@@3PEATty@@EA' 'union ty* x'
-expect '?x@@3PEAUty@@EA' 'struct ty* x'
-expect '?x@@3PEAW4ty@@EA' 'enum ty* x'
-expect '?x@@3PEAVty@@EA' 'class ty* x'
+expect '?x@@3PEAUty@@EA' 'struct ty*x'
+expect '?x@@3PEATty@@EA' 'union ty*x'
+expect '?x@@3PEAUty@@EA' 'struct ty*x'
+expect '?x@@3PEAW4ty@@EA' 'enum ty*x'
+expect '?x@@3PEAVty@@EA' 'class ty*x'
 
-expect '?x@@3PEAV?$tmpl@H@@EA' 'class tmpl<int>* x'
+expect '?x@@3PEAV?$tmpl@H@@EA' 'class tmpl<int>*x'
 
 echo OK
