@@ -153,22 +153,6 @@ struct Type {
   std::vector<struct Type *> params;
 };
 
-static std::vector<String> atsign_to_colons(String s) {
-  std::vector<String> vec;
-  for (;;) {
-    if (!vec.empty())
-      vec.push_back("::");
-    ssize_t pos = s.find("@");
-    if (pos == -1)
-      break;
-    vec.push_back(s.substr(0, pos));
-    s.trim(pos + 1);
-  }
-  vec.push_back(s);
-  std::reverse(vec.begin(), vec.end());
-  return vec;
-}
-
 namespace {
 class Demangler {
 public:
@@ -205,10 +189,13 @@ public:
   std::string str();
 
 private:
-  void type2str(Type &type, std::vector<String> &v);
+  void write_pre(Type &type);
+  void write_post(Type &type);
+  void write_params(Type &type);
+  void write_name(String s);
 
   Demangler &demangler;
-  std::vector<std::string> buffer;
+  std::stringstream os;
 };
 } // namespace
 
@@ -456,187 +443,188 @@ void Demangler::read_prim_type(Type &ty) {
 }
 
 std::string Stringer::str() {
-  std::vector<String> v = atsign_to_colons(demangler.symbol);
-  type2str(demangler.type, v);
-  v.erase(
-      std::remove_if(v.begin(), v.end(), [](String &s) { return s.empty(); }),
-      v.end());
-
-  std::stringstream ss;
-  for (size_t i = 0; i < v.size(); ++i) {
-    if (i > 0 && isalpha(*v[i - 1].p) && isalpha(*v[i].p))
-      ss << " ";
-    ss << v[i];
-  }
-  return ss.str();
+  write_pre(demangler.type);
+  os << " ";
+  write_name(demangler.symbol);
+  write_post(demangler.type);
+  return os.str();
 }
 
-void Stringer::type2str(Type &type, std::vector<String> &v) {
+void Stringer::write_pre(Type &type) {
   if (type.is_function) {
-    if (v[0].startswith('*')) {
-      v.insert(v.begin(), "(");
-      v.push_back(")");
-    }
-
-    std::vector<String> retty = {""};
-    type2str(*type.ptr, retty);
-    v.insert(v.begin(), retty.begin(), retty.end());
-
-    v.push_back("(");
-    for (size_t i = 0; i < type.params.size(); ++i) {
-      if (i != 0)
-        v.push_back(",");
-
-      std::vector<String> paramty = {""};
-      type2str(*type.params[i], paramty);
-      v.insert(v.end(), paramty.begin(), paramty.end());
-    }
-    v.push_back(")");
+    write_pre(*type.ptr);
     return;
   }
 
   switch (type.prim) {
   case Unknown:
     break;
-  case Ptr: {
-    if (type.sclass & Const)
-      v.insert(v.begin(), "const");
-    v.insert(v.begin(), "*");
-    type2str(*type.ptr, v);
-    return;
-  }
-  case Array: {
-    if (v[0].startswith('*')) {
-      v.insert(v.begin(), "(");
-      v.push_back(")");
-    }
-
-    v.push_back("[");
-    buffer.push_back(std::to_string(type.len));
-    v.push_back(buffer.back());
-    v.push_back("]");
-
-    type2str(*type.ptr, v);
+  case Ptr:
+    write_pre(*type.ptr);
+    if (type.ptr->is_function || type.ptr->prim == Array)
+      os << "(";
+    os << "*";
     break;
-  }
+  case Array:
+    write_pre(*type.ptr);
+    break;
   case Struct:
-    v.insert(v.begin(), type.name);
-    v.insert(v.begin(), "struct");
+    os << "struct " << type.name;
     break;
   case Union:
-    v.insert(v.begin(), type.name);
-    v.insert(v.begin(), "union");
+    os << "union " << type.name;
     break;
-  case Class: {
-    std::vector<String> vec = {"class", type.name};
+  case Class:
+    os << "class " << type.name;
     if (!type.params.empty()) {
-      vec.push_back("<");
-      for (size_t i = 0; i < type.params.size(); ++i) {
-        if (i != 0)
-          vec.push_back(",");
-        std::vector<String> tmp = {""};
-        type2str(*type.params[i], tmp);
-        vec.insert(vec.end(), tmp.begin(), tmp.end());
-      }
-      vec.push_back(">");
+      os << "<";
+      write_params(type);
+      os << ">";
     }
-    v.insert(v.begin(), vec.begin(), vec.end());
     break;
-  }
   case Enum: {
-    std::vector<String> name = atsign_to_colons(type.name);
-    v.insert(v.begin(), name.begin(), name.end());
-    v.insert(v.begin(), "enum");
+    os << "enum ";
+    write_name(type.name);
     break;
   }
   case Void:
-    v.insert(v.begin(), "void");
+    os << "void";
     break;
   case Bool:
-    v.insert(v.begin(), "bool");
+    os << "bool";
     break;
   case Char:
-    v.insert(v.begin(), "char");
+    os << "char";
     break;
   case Schar:
-    v.insert(v.begin(), "signed char");
+    os << "signed char";
     break;
   case Uchar:
-    v.insert(v.begin(), "unsigned char");
+    os << "unsigned char";
     break;
   case Short:
-    v.insert(v.begin(), "short");
+    os << "short";
     break;
   case Ushort:
-    v.insert(v.begin(), "unsigned short");
+    os << "unsigned short";
     break;
   case Int:
-    v.insert(v.begin(), "int");
+    os << "int";
     break;
   case Uint:
-    v.insert(v.begin(), "unsigned int");
+    os << "unsigned int";
     break;
   case Long:
-    v.insert(v.begin(), "long");
+    os << "long";
     break;
   case Ulong:
-    v.insert(v.begin(), "unsigned long");
+    os << "unsigned long";
     break;
   case Llong:
-    v.insert(v.begin(), "long long");
+    os << "long long";
     break;
   case Ullong:
-    v.insert(v.begin(), "unsigned long long");
+    os << "unsigned long long";
     break;
   case Wchar:
-    v.insert(v.begin(), "wchar_t");
+    os << "wchar_t";
     break;
   case Float:
-    v.insert(v.begin(), "float");
+    os << "float";
     break;
   case Double:
-    v.insert(v.begin(), "double");
+    os << "double";
     break;
   case Ldouble:
-    v.insert(v.begin(), "long double");
+    os << "long double";
     break;
   case M64:
-    v.insert(v.begin(), "__m64");
+    os << "__m64";
     break;
   case M128:
-    v.insert(v.begin(), "__m128");
+    os << "__m128";
     break;
   case M128d:
-    v.insert(v.begin(), "__m128d");
+    os << "__m128d";
     break;
   case M128i:
-    v.insert(v.begin(), "__m128i");
+    os << "__m128i";
     break;
   case M256:
-    v.insert(v.begin(), "__m256");
+    os << "__m256";
     break;
   case M256d:
-    v.insert(v.begin(), "__m256d");
+    os << "__m256d";
     break;
   case M256i:
-    v.insert(v.begin(), "__m256i");
+    os << "__m256i";
     break;
   case M512:
-    v.insert(v.begin(), "__m512");
+    os << "__m512";
     break;
   case M512d:
-    v.insert(v.begin(), "__m512d");
+    os << "__m512d";
     break;
   case M512i:
-    v.insert(v.begin(), "__m512i");
+    os << "__m512i";
     break;
   case Varargs:
-    v.insert(v.begin(), "...");
+    os << "...";
     break;
   }
 
   if (type.sclass & Const)
-    v.insert(v.begin(), "const");
+    os << " const ";
+}
+
+void Stringer::write_post(Type &type) {
+  if (type.is_function) {
+    os << "(";
+    write_params(type);
+    os << ")";
+    return;
+  }
+
+  if (type.prim == Ptr) {
+    if (type.ptr->is_function || type.ptr->prim == Array)
+      os << ")";
+    write_post(*type.ptr);
+    return;
+  }
+
+  if (type.prim == Array) {
+    os << "[" << type.len << "]";
+    write_post(*type.ptr);
+  }
+}
+
+void Stringer::write_params(Type &type) {
+  for (size_t i = 0; i < type.params.size(); ++i) {
+    if (i != 0)
+      os << ",";
+    write_pre(*type.params[i]);
+    write_post(*type.params[i]);
+  }
+}
+
+void Stringer::write_name(String s) {
+  size_t pos = s.len;
+  bool sep = false;
+
+  for (ssize_t i = pos - 1; i >= 0; --i) {
+    if (s.p[i] != '@')
+      continue;
+
+    if (sep)
+      os << "::";
+    sep = true;
+    os.write(s.p + i + 1, pos - i - 1);
+    pos = i;
+  }
+
+  if (sep)
+    os << "::";
+  os.write(s.p, pos);
 }
 
 int main(int argc, char **argv) {
