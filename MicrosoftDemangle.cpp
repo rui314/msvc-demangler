@@ -380,6 +380,16 @@ void Demangler::read_var_type(Type &ty) {
       tp->ptr = alloc();
       tp = tp->ptr;
     }
+
+    if (consume("$$C")) {
+      if (consume("B"))
+        ty.sclass = Const;
+      else if (consume("C") || consume("D"))
+        ty.sclass = Const | Volatile;
+      else if (!consume("A"))
+        status = BAD;
+    }
+
     read_var_type(*tp);
     return;
   }
