@@ -329,9 +329,10 @@ void Demangler::read_var_type(Type &ty) {
         read_var_type(*tp);
         ty.params.push_back(tp);
       }
-    } else {
-      ty.name = read_string();
+      return;
     }
+
+    ty.name = read_string();
     return;
   }
 
@@ -505,11 +506,10 @@ void Demangler::write_pre(Type &type) {
       os << ">";
     }
     break;
-  case Enum: {
+  case Enum:
     os << "enum ";
     write_name(type.name);
     break;
-  }
   case Void:
     os << "void";
     break;
