@@ -1,4 +1,4 @@
-//===- ItaniumDemangle.cpp ------------------------------------------------===//
+//===- MicrosoftDemangle.cpp ----------------------------------------------===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -83,7 +83,7 @@ enum {
 };
 
 // Calling conventions
-enum {
+enum CallingConv : uint8_t {
   Cdecl,
   Pascal,
   Thiscall,
@@ -95,6 +95,7 @@ enum {
 // Types
 enum PrimTy : uint8_t {
   Unknown,
+  None,
   Function,
   Ptr,
   Array,
@@ -134,19 +135,31 @@ enum PrimTy : uint8_t {
   Varargs,
 };
 
+// Function classes
+enum FuncClass : uint8_t {
+  Public = 1 << 0,
+  Protected = 1 << 1,
+  Private = 1 << 2,
+  Global = 1 << 3,
+  Static = 1 << 4,
+  Virtual = 1 << 5,
+  FFar = 1 << 6,
+};
+
 struct Type {
   PrimTy prim;
+  Type *ptr = nullptr;
   uint8_t sclass = 0;
 
-  uint8_t calling_conv;
+  CallingConv calling_conv;
+  FuncClass func_class;
 
-  Type *ptr = nullptr;
-  int32_t len;
+  int32_t len; // valid if prim == Array
 
-  // if prim is one of (Struct, Union, Class, Enum).
+  // Valid if prim is one of (Struct, Union, Class, Enum).
   String name;
 
-  // function or template parameters
+  // Function or template parameters.
   std::vector<struct Type *> params;
 };
 
@@ -158,17 +171,20 @@ public:
   std::string str();
 
   Error status = OK;
+  std::string msg;
 
 private:
   // Parser
   void read_var_type(Type &ty);
-  void read_func_type(Type &ty);
+  void read_member_func_type(Type &ty);
 
   int read_number();
   String read_string();
   String read_until(const std::string &s);
   PrimTy read_prim_type();
-  void read_calling_conv(Type &ty);
+  int read_func_class();
+  CallingConv read_calling_conv();
+  void read_func_return_type(Type &ty);
   int8_t read_storage_class();
 
   Type *alloc() { return type_buffer + type_index++; }
@@ -199,10 +215,49 @@ void Demangler::parse() {
 
   symbol = read_string();
 
-  if (consume("3"))
+  // Read a variable
+  if (consume("3")) {
     read_var_type(type);
-  else if (consume("Y"))
-    read_func_type(type);
+    return;
+  }
+
+  // Read a non-member function.
+  if (consume("Y")) {
+    type.prim = Function;
+    type.calling_conv = read_calling_conv();
+
+    int8_t sclass = read_storage_class();
+
+    type.ptr = alloc();
+    read_var_type(*type.ptr);
+    type.ptr->sclass = sclass;
+
+    while (status == OK && !input.empty() && !input.startswith('@')) {
+      Type *tp = alloc();
+      read_var_type(*tp);
+      type.params.push_back(tp);
+    }
+    return;
+  }
+
+  // Read a member function.
+  type.prim = Function;
+  type.func_class = (FuncClass)read_func_class();
+  consume("E"); // if 64 bit
+
+  int8_t sclass = read_storage_class();
+
+  type.calling_conv = read_calling_conv();
+
+  type.ptr = alloc();
+  read_func_return_type(*type.ptr);
+  type.ptr->sclass = sclass;
+
+  while (status == OK && !input.empty() && !input.startswith('Z')) {
+    Type *tp = alloc();
+    read_var_type(*tp);
+    type.params.push_back(tp);
+  }
 }
 
 int Demangler::read_number() {
@@ -229,6 +284,7 @@ int Demangler::read_number() {
     break;
   }
   status = BAD_NUMBER;
+  msg = "bad number";
   return 0;
 }
 
@@ -240,6 +296,7 @@ String Demangler::read_until(const std::string &delim) {
   ssize_t len = input.find(delim);
   if (len < 0) {
     status = BAD;
+    msg = "read_until";
     return "";
   }
   String ret = input.substr(0, len);
@@ -247,38 +304,80 @@ String Demangler::read_until(const std::string &delim) {
   return ret;
 }
 
-void Demangler::read_func_type(Type &ty) {
-  ty.prim = Function;
-
-  read_calling_conv(ty);
-  int8_t sclass = read_storage_class();
-  ty.ptr = alloc();
-  read_var_type(*ty.ptr);
-  ty.ptr->sclass = sclass;
-
-  while (status == OK && !input.empty() && !input.startswith('@')) {
-    Type *tp = alloc();
-    read_var_type(*tp);
-    ty.params.push_back(tp);
-  }
+int Demangler::read_func_class() {
+  if (consume("A"))
+    return Private;
+  if (consume("B"))
+    return Private | FFar;
+  if (consume("C"))
+    return Private | Static;
+  if (consume("D"))
+    return Private | Static;
+  if (consume("E"))
+    return Private | Virtual;
+  if (consume("F"))
+    return Private | Virtual;
+  if (consume("I"))
+    return Protected;
+  if (consume("J"))
+    return Protected | FFar;
+  if (consume("K"))
+    return Protected | Static;
+  if (consume("L"))
+    return Protected | Static | FFar;
+  if (consume("M"))
+    return Protected | Virtual;
+  if (consume("N"))
+    return Protected | Virtual | FFar;
+  if (consume("Q"))
+    return Public;
+  if (consume("R"))
+    return Public | FFar;
+  if (consume("S"))
+    return Public | Static;
+  if (consume("T"))
+    return Public | Static | FFar;
+  if (consume("U"))
+    return Public | Virtual;
+  if (consume("V"))
+    return Public | Virtual | FFar;
+  if (consume("Y"))
+    return Global;
+  if (consume("Z"))
+    return Global | FFar;
+  status = BAD;
+  msg = "unknown func class: " + input.str();
+  return 0;
 }
 
-void Demangler::read_calling_conv(Type &ty) {
+CallingConv Demangler::read_calling_conv() {
   if (consume("A"))
-    ty.calling_conv = Cdecl;
-  else if (consume("C"))
-    ty.calling_conv = Pascal;
-  else if (consume("E"))
-    ty.calling_conv = Thiscall;
-  else if (consume("G"))
-    ty.calling_conv = Stdcall;
-  else if (consume("I"))
-    ty.calling_conv = Fastcall;
-  else if (consume("E"))
-    ty.calling_conv = Regcall;
-  else
-    status = BAD_CALLING_CONV;
+    return Cdecl;
+  if (consume("C"))
+    return Pascal;
+  if (consume("E"))
+    return Thiscall;
+  if (consume("G"))
+    return Stdcall;
+  if (consume("I"))
+    return Fastcall;
+  if (consume("E"))
+    return Regcall;
+  status = BAD_CALLING_CONV;
+  msg = "unknown calling convention: " + input.str();
+  return Cdecl;
 };
+
+// <return-type> ::= <type>
+//               ::= @ # structors (they have no declared return type)
+void Demangler::read_func_return_type(Type &ty) {
+  if (consume("@")) {
+    ty.prim = None;
+    return;
+  }
+  read_var_type(ty);
+  consume("@"); // expect
+}
 
 int8_t Demangler::read_storage_class() {
   if (consume("A"))
@@ -370,6 +469,7 @@ void Demangler::read_var_type(Type &ty) {
     int dimension = read_number();
     if (dimension <= 0) {
       status = BAD;
+      msg = "invalid array dimension: " + std::to_string(dimension);
       return;
     }
 
@@ -382,12 +482,14 @@ void Demangler::read_var_type(Type &ty) {
     }
 
     if (consume("$$C")) {
-      if (consume("B"))
+      if (consume("B")) {
         ty.sclass = Const;
-      else if (consume("C") || consume("D"))
+      } else if (consume("C") || consume("D")) {
         ty.sclass = Const | Volatile;
-      else if (!consume("A"))
+      } else if (!consume("A")) {
         status = BAD;
+        msg = "unkonwn storage class: " + input.str();
+      }
     }
 
     read_var_type(*tp);
@@ -403,7 +505,7 @@ void Demangler::read_var_type(Type &ty) {
     fn.ptr = alloc();
     read_var_type(*fn.ptr);
 
-    while (status == OK && !consume("@Z")) {
+    while (status == OK && !consume("@Z") && !consume("Z")) {
       Type *tp = alloc();
       read_var_type(*tp);
       fn.params.push_back(tp);
@@ -473,6 +575,7 @@ PrimTy Demangler::read_prim_type() {
     return Varargs;
 
   status = BAD;
+  msg = "unknown primitive type: " + input.str();
   return Unknown;
 }
 
@@ -486,6 +589,7 @@ std::string Demangler::str() {
 void Demangler::write_pre(Type &type) {
   switch (type.prim) {
   case Unknown:
+  case None:
     break;
   case Function:
     write_pre(*type.ptr);
@@ -658,7 +762,20 @@ void Demangler::write_name(String s) {
 
   if (sep)
     os << "::";
-  os.write(s.p, pos);
+
+  String tok = s.substr(0, pos);
+
+  if (tok.consume("?0")) {
+    os << tok << "::" << tok;
+    return;
+  }
+
+  if (tok.consume("?1")) {
+    os << tok << "::~" << tok;
+    return;
+  }
+
+  os << tok;
 }
 
 void Demangler::write_space() {
@@ -676,7 +793,7 @@ int main(int argc, char **argv) {
   Demangler demangler(argv[1], strlen(argv[1]));
   demangler.parse();
   if (demangler.status != OK) {
-    std::cerr << "BAD\n";
+    std::cerr << demangler.msg << "\n";
     return 1;
   }
 
