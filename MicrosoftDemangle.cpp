@@ -30,15 +30,12 @@ public:
 
   std::string str() const { return {p, p + len}; }
 
-  bool startswith(char c) { return len > 0 && *p == c; }
   bool empty() const { return len == 0; }
 
-  bool consume(const std::string &s) {
-    if (s.size() > len || strncmp(p, s.data(), s.size()) != 0)
-      return false;
-    p += s.size();
-    len -= s.size();
-    return true;
+  bool startswith(char c) { return len > 0 && *p == c; }
+
+  bool startswith(const std::string &s) {
+    return s.size() <= len && strncmp(p, s.data(), s.size()) == 0;
   }
 
   ssize_t find(const std::string &s) const {
@@ -188,7 +185,20 @@ private:
   int8_t read_storage_class();
 
   Type *alloc() { return type_buffer + type_index++; }
-  bool consume(const std::string &s) { return input.consume(s); }
+
+  bool consume(const std::string &s) {
+    if (!input.startswith(s))
+      return false;
+    input.trim(s.size());
+    return true;
+  }
+
+  bool consume(char c) {
+    if (!input.startswith(c))
+      return false;
+    input.trim(1);
+    return true;
+  }
 
   String input;
   Type type;
@@ -765,12 +775,14 @@ void Demangler::write_name(String s) {
 
   String tok = s.substr(0, pos);
 
-  if (tok.consume("?0")) {
+  if (tok.startswith("?0")) {
+    tok.trim(2);
     os << tok << "::" << tok;
     return;
   }
 
-  if (tok.consume("?1")) {
+  if (tok.startswith("?1")) {
+    tok.trim(2);
     os << tok << "::~" << tok;
     return;
   }
