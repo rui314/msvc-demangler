@@ -67,8 +67,6 @@ std::ostream &operator<<(std::ostream &os, const String s) {
   return os;
 }
 
-enum Error { OK, BAD, BAD_NUMBER, BAD_CALLING_CONV };
-
 // Storage classes
 enum {
   Const = 1 << 0,
@@ -167,8 +165,7 @@ public:
   void parse();
   std::string str();
 
-  Error status = OK;
-  std::string msg;
+  std::string error;
 
 private:
   // Parser
@@ -242,7 +239,7 @@ void Demangler::parse() {
     read_var_type(*type.ptr);
     type.ptr->sclass = sclass;
 
-    while (status == OK && !input.empty() && !input.startswith('@')) {
+    while (error.empty() && !input.empty() && !input.startswith('@')) {
       Type *tp = alloc();
       read_var_type(*tp);
       type.params.push_back(tp);
@@ -263,7 +260,7 @@ void Demangler::parse() {
   read_func_return_type(*type.ptr);
   type.ptr->sclass = sclass;
 
-  while (status == OK && !input.empty() && !input.startswith('Z')) {
+  while (error.empty() && !input.empty() && !input.startswith('Z')) {
     Type *tp = alloc();
     read_var_type(*tp);
     type.params.push_back(tp);
@@ -293,8 +290,7 @@ int Demangler::read_number() {
     }
     break;
   }
-  status = BAD_NUMBER;
-  msg = "bad number";
+  error = "bad number";
   return 0;
 }
 
@@ -305,8 +301,7 @@ String Demangler::read_string() {
 String Demangler::read_until(const std::string &delim) {
   ssize_t len = input.find(delim);
   if (len < 0) {
-    status = BAD;
-    msg = "read_until";
+    error = "read_until";
     return "";
   }
   String ret = input.substr(0, len);
@@ -355,8 +350,7 @@ int Demangler::read_func_class() {
     return Global;
   if (consume("Z"))
     return Global | FFar;
-  status = BAD;
-  msg = "unknown func class: " + input.str();
+  error = "unknown func class: " + input.str();
   return 0;
 }
 
@@ -373,8 +367,7 @@ CallingConv Demangler::read_calling_conv() {
     return Fastcall;
   if (consume("E"))
     return Regcall;
-  status = BAD_CALLING_CONV;
-  msg = "unknown calling convention: " + input.str();
+  error = "unknown calling convention: " + input.str();
   return Cdecl;
 };
 
@@ -433,7 +426,7 @@ void Demangler::read_var_type(Type &ty) {
 
     if (consume("?$")) {
       ty.name = read_until("@");
-      while (status == OK && !consume("@")) {
+      while (error.empty() && !consume("@")) {
         Type *tp = alloc();
         read_var_type(*tp);
         ty.params.push_back(tp);
@@ -478,8 +471,7 @@ void Demangler::read_var_type(Type &ty) {
   if (consume("Y")) {
     int dimension = read_number();
     if (dimension <= 0) {
-      status = BAD;
-      msg = "invalid array dimension: " + std::to_string(dimension);
+      error = "invalid array dimension: " + std::to_string(dimension);
       return;
     }
 
@@ -492,14 +484,12 @@ void Demangler::read_var_type(Type &ty) {
     }
 
     if (consume("$$C")) {
-      if (consume("B")) {
+      if (consume("B"))
         ty.sclass = Const;
-      } else if (consume("C") || consume("D")) {
+      else if (consume("C") || consume("D"))
         ty.sclass = Const | Volatile;
-      } else if (!consume("A")) {
-        status = BAD;
-        msg = "unkonwn storage class: " + input.str();
-      }
+      else if (!consume("A"))
+        error = "unkonwn storage class: " + input.str();
     }
 
     read_var_type(*tp);
@@ -515,7 +505,7 @@ void Demangler::read_var_type(Type &ty) {
     fn.ptr = alloc();
     read_var_type(*fn.ptr);
 
-    while (status == OK && !consume("@Z") && !consume("Z")) {
+    while (error.empty() && !consume("@Z") && !consume("Z")) {
       Type *tp = alloc();
       read_var_type(*tp);
       fn.params.push_back(tp);
@@ -584,8 +574,7 @@ PrimTy Demangler::read_prim_type() {
   if (consume("Z"))
     return Varargs;
 
-  status = BAD;
-  msg = "unknown primitive type: " + input.str();
+  error = "unknown primitive type: " + input.str();
   return Unknown;
 }
 
@@ -804,8 +793,8 @@ int main(int argc, char **argv) {
 
   Demangler demangler(argv[1], strlen(argv[1]));
   demangler.parse();
-  if (demangler.status != OK) {
-    std::cerr << demangler.msg << "\n";
+  if (!demangler.error.empty()) {
+    std::cerr << demangler.error << "\n";
     return 1;
   }
 
