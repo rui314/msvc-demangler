@@ -54,6 +54,20 @@ public:
   String substr(size_t off) const { return {p + off, len - off}; }
   String substr(size_t off, size_t length) const { return {p + off, length}; }
 
+  int shift() {
+    if (len == 0)
+      return -1;
+    len--;
+    return *p++;
+  }
+
+  void unshift(int c) {
+    if (c == -1)
+      return;
+    len++;
+    p--;
+  }
+
   const char *p = nullptr;
   size_t len = 0;
 };
@@ -114,17 +128,6 @@ enum PrimTy : uint8_t {
   Float,
   Double,
   Ldouble,
-  M64,
-  M128,
-  M128d,
-  M128i,
-  M256,
-  M256d,
-  M256i,
-  M512,
-  M512d,
-  M512i,
-  Varargs,
 };
 
 // Function classes
@@ -368,65 +371,71 @@ String Demangler::read_until(const std::string &delim) {
 }
 
 int Demangler::read_func_class() {
-  if (consume("A"))
+  switch (int c = input.shift()) {
+  case 'A':
     return Private;
-  if (consume("B"))
+  case 'B':
     return Private | FFar;
-  if (consume("C"))
+  case 'C':
     return Private | Static;
-  if (consume("D"))
+  case 'D':
     return Private | Static;
-  if (consume("E"))
+  case 'E':
     return Private | Virtual;
-  if (consume("F"))
+  case 'F':
     return Private | Virtual;
-  if (consume("I"))
+  case 'I':
     return Protected;
-  if (consume("J"))
+  case 'J':
     return Protected | FFar;
-  if (consume("K"))
+  case 'K':
     return Protected | Static;
-  if (consume("L"))
+  case 'L':
     return Protected | Static | FFar;
-  if (consume("M"))
+  case 'M':
     return Protected | Virtual;
-  if (consume("N"))
+  case 'N':
     return Protected | Virtual | FFar;
-  if (consume("Q"))
+  case 'Q':
     return Public;
-  if (consume("R"))
+  case 'R':
     return Public | FFar;
-  if (consume("S"))
+  case 'S':
     return Public | Static;
-  if (consume("T"))
+  case 'T':
     return Public | Static | FFar;
-  if (consume("U"))
+  case 'U':
     return Public | Virtual;
-  if (consume("V"))
+  case 'V':
     return Public | Virtual | FFar;
-  if (consume("Y"))
+  case 'Y':
     return Global;
-  if (consume("Z"))
+  case 'Z':
     return Global | FFar;
-  error = "unknown func class: " + input.str();
-  return 0;
+  default:
+    input.unshift(c);
+    error = "unknown func class: " + input.str();
+    return 0;
+  }
 }
 
 CallingConv Demangler::read_calling_conv() {
-  if (consume("A"))
+  switch (int c = input.shift()) {
+  case 'A':
     return Cdecl;
-  if (consume("C"))
+  case 'C':
     return Pascal;
-  if (consume("E"))
+  case 'E':
     return Thiscall;
-  if (consume("G"))
+  case 'G':
     return Stdcall;
-  if (consume("I"))
+  case 'I':
     return Fastcall;
-  if (consume("E"))
-    return Regcall;
-  error = "unknown calling convention: " + input.str();
-  return Cdecl;
+  default:
+    input.unshift(c);
+    error = "unknown calling convention: " + input.str();
+    return Cdecl;
+  }
 };
 
 // <return-type> ::= <type>
@@ -441,23 +450,27 @@ void Demangler::read_func_return_type(Type &ty) {
 }
 
 int8_t Demangler::read_storage_class() {
-  if (consume("A"))
+  switch (int c = input.shift()) {
+  case 'A':
     return 0;
-  if (consume("B"))
+  case 'B':
     return Const;
-  if (consume("C"))
+  case 'C':
     return Volatile;
-  if (consume("D"))
+  case 'D':
     return Const | Volatile;
-  if (consume("E"))
+  case 'E':
     return Far;
-  if (consume("F"))
+  case 'F':
     return Const | Far;
-  if (consume("G"))
+  case 'G':
     return Volatile | Far;
-  if (consume("H"))
+  case 'H':
     return Const | Volatile | Far;
-  return 0;
+  default:
+    input.unshift(c);
+    return 0;
+  }
 }
 
 int8_t Demangler::read_storage_class_for_return() {
@@ -590,65 +603,47 @@ void Demangler::read_var_type(Type &ty) {
 
 // Reads a primitive type.
 PrimTy Demangler::read_prim_type() {
-  if (consume("X"))
+  switch (int c = input.shift()) {
+  case 'X':
     return Void;
-  if (consume("_N"))
-    return Bool;
-  if (consume("D"))
+  case 'D':
     return Char;
-  if (consume("C"))
+  case 'C':
     return Schar;
-  if (consume("E"))
+  case 'E':
     return Uchar;
-  if (consume("F"))
+  case 'F':
     return Short;
-  if (consume("int"))
+  case 'G':
     return Ushort;
-  if (consume("H"))
+  case 'H':
     return Int;
-  if (consume("I"))
+  case 'I':
     return Uint;
-  if (consume("J"))
+  case 'J':
     return Long;
-  if (consume("int"))
+  case 'K':
     return Ulong;
-  if (consume("_J"))
-    return Llong;
-  if (consume("_K"))
-    return Ullong;
-  if (consume("_W"))
-    return Wchar;
-  if (consume("M"))
+  case 'M':
     return Float;
-  if (consume("N"))
+  case 'N':
     return Double;
-  if (consume("ldouble"))
+  case 'O':
     return Ldouble;
-  if (consume("T__m64@@"))
-    return M64;
-  if (consume("T__m128@@"))
-    return M128;
-  if (consume("U__m128d@@"))
-    return M128d;
-  if (consume("T__m128i@@"))
-    return M128i;
-  if (consume("T__m256@@"))
-    return M256;
-  if (consume("U__m256d@@"))
-    return M256d;
-  if (consume("T__m256i@@"))
-    return M256i;
-  if (consume("T__m512@@"))
-    return M512;
-  if (consume("U__m512d@@"))
-    return M512d;
-  if (consume("T__m512i@@"))
-    return M512i;
-  if (consume("Z"))
-    return Varargs;
+  default:
+    input.unshift(c);
+    if (consume("_N"))
+      return Bool;
+    if (consume("_J"))
+      return Llong;
+    if (consume("_K"))
+      return Ullong;
+    if (consume("_W"))
+      return Wchar;
 
-  error = "unknown primitive type: " + input.str();
-  return Unknown;
+    error = "unknown primitive type: " + input.str();
+    return Unknown;
+  }
 }
 
 // Converts an AST to a string.
@@ -768,39 +763,6 @@ void Demangler::write_pre(Type &type) {
     break;
   case Ldouble:
     os << "long double";
-    break;
-  case M64:
-    os << "__m64";
-    break;
-  case M128:
-    os << "__m128";
-    break;
-  case M128d:
-    os << "__m128d";
-    break;
-  case M128i:
-    os << "__m128i";
-    break;
-  case M256:
-    os << "__m256";
-    break;
-  case M256d:
-    os << "__m256d";
-    break;
-  case M256i:
-    os << "__m256i";
-    break;
-  case M512:
-    os << "__m512";
-    break;
-  case M512d:
-    os << "__m512d";
-    break;
-  case M512i:
-    os << "__m512i";
-    break;
-  case Varargs:
-    os << "...";
     break;
   }
 
