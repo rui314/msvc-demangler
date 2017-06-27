@@ -36,5 +36,6 @@ expect '?instance@@3Vklass@@A' 'class klass instance'
 expect '?instance$initializer$@@3P6AXXZEA' 'void(*instance$initializer$)(void)'
 expect '??0klass@@QEAA@XZ' 'klass::klass(void)'
 expect '??1klass@@QEAA@XZ' 'klass::~klass(void)'
+expect '?x@@YAHPEAVklass@@AEAV1@@Z' 'int x(class klass*,class klass&)'
 
 echo OK

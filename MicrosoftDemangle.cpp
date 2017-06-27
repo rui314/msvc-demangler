@@ -32,9 +32,9 @@ public:
 
   bool empty() const { return len == 0; }
 
-  bool startswith(char c) { return len > 0 && *p == c; }
+  bool startswith(char c) const { return len > 0 && *p == c; }
 
-  bool startswith(const std::string &s) {
+  bool startswith(const std::string &s) const {
     return s.size() <= len && strncmp(p, s.data(), s.size()) == 0;
   }
 
@@ -93,6 +93,7 @@ enum PrimTy : uint8_t {
   None,
   Function,
   Ptr,
+  Ref,
   Array,
 
   Struct,
@@ -152,7 +153,7 @@ struct Type {
   int32_t len; // valid if prim == Array
 
   // Valid if prim is one of (Struct, Union, Class, Enum).
-  String name;
+  std::vector<String> name;
 
   // Function or template parameters.
   std::vector<struct Type *> params;
@@ -174,12 +175,14 @@ private:
 
   int read_number();
   String read_string();
+  std::vector<String> read_name();
   String read_until(const std::string &s);
   PrimTy read_prim_type();
   int read_func_class();
   CallingConv read_calling_conv();
   void read_func_return_type(Type &ty);
   int8_t read_storage_class();
+  int8_t read_storage_class_for_return();
 
   Type *alloc() { return type_buffer + type_index++; }
 
@@ -199,15 +202,17 @@ private:
 
   String input;
   Type type;
-  String symbol;
+  std::vector<String> symbol;
   Type type_buffer[100];
   size_t type_index = 0;
+
+  std::vector<String> repeated_names;
 
   // Writer
   void write_pre(Type &type);
   void write_post(Type &type);
   void write_params(Type &type);
-  void write_name(String s);
+  void write_name(const std::vector<String> &name);
   void write_space();
 
   std::stringstream os;
@@ -216,11 +221,12 @@ private:
 
 void Demangler::parse() {
   if (!consume("?")) {
-    symbol = input;
+    symbol.push_back(input);
     type.prim = Unknown;
   }
 
-  symbol = read_string();
+  // Read a symbol name.
+  symbol = read_name();
 
   // Read a variable
   if (consume("3")) {
@@ -233,7 +239,7 @@ void Demangler::parse() {
     type.prim = Function;
     type.calling_conv = read_calling_conv();
 
-    int8_t sclass = read_storage_class();
+    int8_t sclass = read_storage_class_for_return();
 
     type.ptr = alloc();
     read_var_type(*type.ptr);
@@ -251,14 +257,11 @@ void Demangler::parse() {
   type.prim = Function;
   type.func_class = (FuncClass)read_func_class();
   consume("E"); // if 64 bit
-
-  int8_t sclass = read_storage_class();
-
   type.calling_conv = read_calling_conv();
 
   type.ptr = alloc();
+  type.ptr->sclass = read_storage_class();
   read_func_return_type(*type.ptr);
-  type.ptr->sclass = sclass;
 
   while (error.empty() && !input.empty() && !input.startswith('Z')) {
     Type *tp = alloc();
@@ -294,8 +297,28 @@ int Demangler::read_number() {
   return 0;
 }
 
-String Demangler::read_string() {
-  return read_until("@@");
+String Demangler::read_string() { return read_until("@"); }
+
+std::vector<String> Demangler::read_name() {
+  std::vector<String> v;
+  while (!consume("@")) {
+    if (0 < input.len && '0' <= input.p[0] && input.p[0] <= '9') {
+      int i = input.p[0] - '0';
+      if (i >= repeated_names.size()) {
+        error = "name reference too large: " + input.str();
+        return {};
+      }
+      input.trim(1);
+      v.push_back(repeated_names[i]);
+      continue;
+    }
+
+    String s = read_string();
+    v.push_back(s);
+    if (repeated_names.size() < 10)
+      repeated_names.push_back(s);
+  }
+  return v;
 }
 
 String Demangler::read_until(const std::string &delim) {
@@ -399,25 +422,31 @@ int8_t Demangler::read_storage_class() {
     return Volatile | Far;
   if (consume("H"))
     return Const | Volatile | Far;
-  if (consume("I"))
-    return Huge;
-  if (consume("F"))
-    return Unaligned;
-  if (consume("I"))
-    return Restrict;
+  return 0;
+}
+
+int8_t Demangler::read_storage_class_for_return() {
+  if (consume("?A"))
+    return 0;
+  if (consume("?B"))
+    return Const;
+  if (consume("?C"))
+    return Volatile;
+  if (consume("?D"))
+    return Const | Volatile;
   return 0;
 }
 
 void Demangler::read_var_type(Type &ty) {
   if (consume("T")) {
     ty.prim = Union;
-    ty.name = read_string();
+    ty.name = read_name();
     return;
   }
 
   if (consume("U")) {
     ty.prim = Struct;
-    ty.name = read_string();
+    ty.name = read_name();
     return;
   }
 
@@ -425,7 +454,7 @@ void Demangler::read_var_type(Type &ty) {
     ty.prim = Class;
 
     if (consume("?$")) {
-      ty.name = read_until("@");
+      ty.name.push_back(read_string());
       while (error.empty() && !consume("@")) {
         Type *tp = alloc();
         read_var_type(*tp);
@@ -434,13 +463,20 @@ void Demangler::read_var_type(Type &ty) {
       return;
     }
 
-    ty.name = read_string();
+    ty.name = read_name();
     return;
   }
 
   if (consume("W4")) {
     ty.prim = Enum;
-    ty.name = read_string();
+    ty.name = read_name();
+    return;
+  }
+
+  if (consume("AEA")) {
+    ty.prim = Ref;
+    ty.ptr = alloc();
+    read_var_type(*ty.ptr);
     return;
   }
 
@@ -594,22 +630,29 @@ void Demangler::write_pre(Type &type) {
     write_pre(*type.ptr);
     return;
   case Ptr:
+  case Ref:
     write_pre(*type.ptr);
     if (type.ptr->prim == Function || type.ptr->prim == Array)
       os << "(";
-    os << "*";
+    if (type.prim == Ptr)
+      os << "*";
+    else
+      os << "&";
     break;
   case Array:
     write_pre(*type.ptr);
     break;
   case Struct:
-    os << "struct " << type.name;
+    os << "struct ";
+    write_name(type.name);
     break;
   case Union:
-    os << "union " << type.name;
+    os << "union ";
+    write_name(type.name);
     break;
   case Class:
-    os << "class " << type.name;
+    os << "class ";
+    write_name(type.name);
     if (!type.params.empty()) {
       os << "<";
       write_params(type);
@@ -720,7 +763,7 @@ void Demangler::write_post(Type &type) {
     return;
   }
 
-  if (type.prim == Ptr) {
+  if (type.prim == Ptr || type.prim == Ref) {
     if (type.ptr->prim == Function || type.ptr->prim == Array)
       os << ")";
     write_post(*type.ptr);
@@ -742,41 +785,20 @@ void Demangler::write_params(Type &type) {
   }
 }
 
-void Demangler::write_name(String s) {
+void Demangler::write_name(const std::vector<String> &name) {
+  if (name.empty())
+    return;
   write_space();
 
-  size_t pos = s.len;
-  bool sep = false;
+  for (size_t i = name.size() - 1; i != 0; --i)
+    os << name[i] << "::";
 
-  for (ssize_t i = pos - 1; i >= 0; --i) {
-    if (s.p[i] != '@')
-      continue;
-
-    if (sep)
-      os << "::";
-    sep = true;
-    os.write(s.p + i + 1, pos - i - 1);
-    pos = i;
-  }
-
-  if (sep)
-    os << "::";
-
-  String tok = s.substr(0, pos);
-
-  if (tok.startswith("?0")) {
-    tok.trim(2);
-    os << tok << "::" << tok;
-    return;
-  }
-
-  if (tok.startswith("?1")) {
-    tok.trim(2);
-    os << tok << "::~" << tok;
-    return;
-  }
-
-  os << tok;
+  if (name[0].startswith("?0"))
+    os << name[0].substr(2) << "::" << name[0].substr(2);
+  else if (name[0].startswith("?1"))
+    os << name[0].substr(2) << "::~" << name[0].substr(2);
+  else
+    os << name[0];
 }
 
 void Demangler::write_space() {
