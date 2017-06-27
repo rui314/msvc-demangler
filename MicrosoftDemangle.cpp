@@ -230,9 +230,9 @@ private:
   std::vector<String> repeated_names;
 
   // Functions to convert Type to String.
-  void write_pre(Type &type);
-  void write_post(Type &type);
-  void write_params(Type &type);
+  void write_pre(Type &ty);
+  void write_post(Type &ty);
+  void write_params(Type &ty);
   void write_name(const std::vector<String> &name);
   void write_space();
 
@@ -670,53 +670,53 @@ std::string Demangler::str() {
 }
 
 // Write the "first half" of a given type.
-void Demangler::write_pre(Type &type) {
-  switch (type.prim) {
+void Demangler::write_pre(Type &ty) {
+  switch (ty.prim) {
   case Unknown:
   case None:
     break;
   case Function:
-    write_pre(*type.ptr);
+    write_pre(*ty.ptr);
     return;
   case Ptr:
   case Ref:
-    write_pre(*type.ptr);
+    write_pre(*ty.ptr);
 
     // "[]" and "()" (for function parameters) take precedence over "*",
     // so "int *x(int)" means "x is a function returning int *". We need
     // parentheses to supercede the default precedence. (e.g. we want to
     // emit something like "int (*x)(int)".)
-    if (type.ptr->prim == Function || type.ptr->prim == Array)
+    if (ty.ptr->prim == Function || ty.ptr->prim == Array)
       os << "(";
 
-    if (type.prim == Ptr)
+    if (ty.prim == Ptr)
       os << "*";
     else
       os << "&";
     break;
   case Array:
-    write_pre(*type.ptr);
+    write_pre(*ty.ptr);
     break;
   case Struct:
     os << "struct ";
-    write_name(type.name);
+    write_name(ty.name);
     break;
   case Union:
     os << "union ";
-    write_name(type.name);
+    write_name(ty.name);
     break;
   case Class:
     os << "class ";
-    write_name(type.name);
-    if (!type.params.empty()) {
+    write_name(ty.name);
+    if (!ty.params.empty()) {
       os << "<";
-      write_params(type);
+      write_params(ty);
       os << ">";
     }
     break;
   case Enum:
     os << "enum ";
-    write_name(type.name);
+    write_name(ty.name);
     break;
   case Void:
     os << "void";
@@ -771,41 +771,41 @@ void Demangler::write_pre(Type &type) {
     break;
   }
 
-  if (type.sclass & Const) {
+  if (ty.sclass & Const) {
     write_space();
     os << "const";
   }
 }
 
 // Write the "second half" of a given type.
-void Demangler::write_post(Type &type) {
-  if (type.prim == Function) {
+void Demangler::write_post(Type &ty) {
+  if (ty.prim == Function) {
     os << "(";
-    write_params(type);
+    write_params(ty);
     os << ")";
     return;
   }
 
-  if (type.prim == Ptr || type.prim == Ref) {
-    if (type.ptr->prim == Function || type.ptr->prim == Array)
+  if (ty.prim == Ptr || ty.prim == Ref) {
+    if (ty.ptr->prim == Function || ty.ptr->prim == Array)
       os << ")";
-    write_post(*type.ptr);
+    write_post(*ty.ptr);
     return;
   }
 
-  if (type.prim == Array) {
-    os << "[" << type.len << "]";
-    write_post(*type.ptr);
+  if (ty.prim == Array) {
+    os << "[" << ty.len << "]";
+    write_post(*ty.ptr);
   }
 }
 
 // Write a function or template parameter list.
-void Demangler::write_params(Type &type) {
-  for (size_t i = 0; i < type.params.size(); ++i) {
+void Demangler::write_params(Type &ty) {
+  for (size_t i = 0; i < ty.params.size(); ++i) {
     if (i != 0)
       os << ",";
-    write_pre(*type.params[i]);
-    write_post(*type.params[i]);
+    write_pre(*ty.params[i]);
+    write_post(*ty.params[i]);
   }
 }
 
