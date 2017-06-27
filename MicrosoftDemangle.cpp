@@ -526,18 +526,29 @@ void Demangler::read_var_type(Type &ty) {
     return;
   }
 
-  if (consume("PEA")) {
+  if (consume("P6A")) {
     ty.prim = Ptr;
     ty.ptr = alloc();
-    read_var_type(*ty.ptr);
+
+    Type &fn = *ty.ptr;
+    fn.prim = Function;
+    fn.ptr = alloc();
+    read_var_type(*fn.ptr);
+
+    while (error.empty() && !consume("@Z") && !consume("Z")) {
+      Type *tp = alloc();
+      read_var_type(*tp);
+      fn.params.push_back(tp);
+    }
     return;
   }
 
-  if (consume("PEB")) {
+  if (consume("P")) {
     ty.prim = Ptr;
+    consume("E");  // if 64 bit
     ty.ptr = alloc();
+    ty.ptr->sclass = read_storage_class();
     read_var_type(*ty.ptr);
-    ty.ptr->sclass = Const;
     return;
   }
 
@@ -575,23 +586,6 @@ void Demangler::read_var_type(Type &ty) {
     }
 
     read_var_type(*tp);
-    return;
-  }
-
-  if (consume("P6A")) {
-    ty.prim = Ptr;
-    ty.ptr = alloc();
-
-    Type &fn = *ty.ptr;
-    fn.prim = Function;
-    fn.ptr = alloc();
-    read_var_type(*fn.ptr);
-
-    while (error.empty() && !consume("@Z") && !consume("Z")) {
-      Type *tp = alloc();
-      read_var_type(*tp);
-      fn.params.push_back(tp);
-    }
     return;
   }
 
