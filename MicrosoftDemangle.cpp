@@ -41,16 +41,6 @@ public:
     return s.size() <= len && strncmp(p, s.data(), s.size()) == 0;
   }
 
-  ssize_t find(const std::string &s) const {
-    if (s.size() > len)
-      return -1;
-
-    for (size_t i = 0; i < len - s.size(); ++i)
-      if (strncmp(p + i, s.data(), s.size()) == 0)
-        return i;
-    return -1;
-  }
-
   String substr(size_t off) const { return {p + off, len - off}; }
   String substr(size_t off, size_t length) const { return {p + off, length}; }
 
@@ -340,7 +330,18 @@ int Demangler::read_number() {
   return 0;
 }
 
-String Demangler::read_string() { return read_until("@"); }
+// Read until the next '@'.
+String Demangler::read_string() {
+  for (size_t i = 0; i < input.len; ++i) {
+    if (input.p[i] != '@')
+      continue;
+    String ret = input.substr(0, i);
+    input.trim(i + 1);
+    return ret;
+  }
+  error = "read_string: missing '@': " + input.str();
+  return "";
+}
 
 // Parses a name in the form of A@B@C@@ which represents C::B::A.
 std::vector<String> Demangler::read_name() {
@@ -363,17 +364,6 @@ std::vector<String> Demangler::read_name() {
       repeated_names.push_back(s);
   }
   return v;
-}
-
-String Demangler::read_until(const std::string &delim) {
-  ssize_t len = input.find(delim);
-  if (len < 0) {
-    error = "read_until";
-    return "";
-  }
-  String ret = input.substr(0, len);
-  input.trim(len + delim.size());
-  return ret;
 }
 
 int Demangler::read_func_class() {
