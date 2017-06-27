@@ -264,11 +264,9 @@ void Demangler::parse() {
     type.prim = Function;
     type.calling_conv = read_calling_conv();
 
-    int8_t sclass = read_storage_class_for_return();
-
     type.ptr = alloc();
+    type.ptr->sclass = read_storage_class_for_return();
     read_var_type(*type.ptr);
-    type.ptr->sclass = sclass;
 
     while (error.empty() && !input.empty() && !input.startswith('@')) {
       Type *tp = alloc();
