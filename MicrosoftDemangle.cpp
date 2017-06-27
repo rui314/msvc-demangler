@@ -28,7 +28,7 @@ public:
   String(const String &other) = default;
   String(const std::string &s) : p(s.data()), len(s.size()) {}
   String(const char *p) : p(p), len(strlen(p)) {}
-  String(const char *p, const char *end) : p(p), len(end - p) {}
+  String(const char *p, size_t len) : p(p), len(len) {}
   template <size_t N> String(const char (&p)[N]) : p(p), len(N - 1) {}
 
   std::string str() const { return {p, p + len}; }
@@ -51,15 +51,8 @@ public:
     return -1;
   }
 
-  void trim(size_t n) {
-    assert(n <= len);
-    p += n;
-    len -= n;
-  }
-
-  String substr(size_t start, ssize_t end = -1) const {
-    return {p + start, p + (end == -1 ? len : end)};
-  }
+  String substr(size_t off) const { return {p + off, len - off}; }
+  String substr(size_t off, size_t length) const { return {p + off, length}; }
 
   const char *p = nullptr;
   size_t len = 0;
@@ -170,7 +163,7 @@ struct Type {
 namespace {
 class Demangler {
 public:
-  Demangler(const char *s, size_t len) : input(s, s + len) {}
+  Demangler(String s) : input(s) {}
 
   // You are supposed to call parse() first and then check if Error is
   // still empty. After that, call str() to get a result.
@@ -201,14 +194,14 @@ private:
   bool consume(const std::string &s) {
     if (!input.startswith(s))
       return false;
-    input.trim(s.size());
+    input = input.substr(s.size());
     return true;
   }
 
   bool consume(char c) {
     if (!input.startswith(c))
       return false;
-    input.trim(1);
+    input = input.substr(1);
     return true;
   }
 
@@ -316,7 +309,7 @@ int Demangler::read_number() {
 
   if (0 < input.len && '0' <= *input.p && *input.p <= '9') {
     int32_t ret = *input.p - '0' + 1;
-    input.trim(1);
+    input = input.substr(1);
     return neg ? -ret : ret;
   }
 
@@ -325,7 +318,7 @@ int Demangler::read_number() {
   for (; i < input.len; ++i) {
     char c = input.p[i];
     if (c == '@') {
-      input.trim(i + 1);
+      input = input.substr(i + 1);
       return neg ? -ret : ret;
     }
     if ('A' <= c && c <= 'P') {
@@ -350,7 +343,7 @@ std::vector<String> Demangler::read_name() {
         error = "name reference too large: " + input.str();
         return {};
       }
-      input.trim(1);
+      input = input.substr(1);
       v.push_back(repeated_names[i]);
       continue;
     }
@@ -370,7 +363,7 @@ String Demangler::read_until(const std::string &delim) {
     return "";
   }
   String ret = input.substr(0, len);
-  input.trim(len + delim.size());
+  input = input.substr(len + delim.size());
   return ret;
 }
 
@@ -880,7 +873,7 @@ int main(int argc, char **argv) {
     exit(1);
   }
 
-  Demangler demangler(argv[1], strlen(argv[1]));
+  Demangler demangler({argv[1], strlen(argv[1])});
   demangler.parse();
   if (!demangler.error.empty()) {
     std::cerr << demangler.error << "\n";
