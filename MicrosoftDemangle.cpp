@@ -141,8 +141,11 @@ enum FuncClass : uint8_t {
 // this type and then converted to string.
 struct Type {
   PrimTy prim;
+  uint8_t sclass = 0;  // storage class
+
+  // Represents a type X in "a pointer to X", "a reference to X",
+  // "an array of X", or "a function returning X".
   Type *ptr = nullptr;
-  uint8_t sclass = 0;
 
   CallingConv calling_conv;
   FuncClass func_class;
@@ -678,8 +681,14 @@ void Demangler::write_pre(Type &type) {
   case Ptr:
   case Ref:
     write_pre(*type.ptr);
+
+    // "[]" and "()" (for function parameters) take precedence over "*",
+    // so "int *x(int)" means "x is a function returning int *". We need
+    // parentheses to supercede the default precedence. (e.g. we want to
+    // emit something like "int (*x)(int)".)
     if (type.ptr->prim == Function || type.ptr->prim == Array)
       os << "(";
+
     if (type.prim == Ptr)
       os << "*";
     else
