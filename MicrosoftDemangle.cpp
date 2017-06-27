@@ -13,12 +13,15 @@
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
+#include <memory>
 #include <numeric>
 #include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
 
+// A string class that does not own its contents.
+// This class provides a few utility functions for string manipulations.
 class String {
 public:
   String() = default;
@@ -142,6 +145,8 @@ enum FuncClass : uint8_t {
   FFar = 1 << 6,
 };
 
+// The type class. Mangled symbols are first parsed and converted to
+// this type and then converted to string.
 struct Type {
   PrimTy prim;
   Type *ptr = nullptr;
@@ -159,17 +164,24 @@ struct Type {
   std::vector<struct Type *> params;
 };
 
+// Demangler class takes the main role in demangling symbols.
+// It has a set of functions to parse mangled symbols into Type instnaces.
+// It also has a set of functions to cnovert Type instances to strings.
 namespace {
 class Demangler {
 public:
   Demangler(const char *s, size_t len) : input(s, s + len) {}
+
+  // You are supposed to call parse() first and then check if Error is
+  // still empty. After that, call str() to get a result.
   void parse();
   std::string str();
 
+  // Error string. Empty if there's no error.
   std::string error;
 
 private:
-  // Parser
+  // Parser functions. This is a recursive-descendent parser.
   void read_var_type(Type &ty);
   void read_member_func_type(Type &ty);
 
@@ -200,35 +212,53 @@ private:
     return true;
   }
 
+  // Mangled symbol. read_* functions shorten this string
+  // as they parse it.
   String input;
-  Type type;
-  std::vector<String> symbol;
-  Type type_buffer[100];
-  size_t type_index = 0;
 
+  // A parsed mangled symbol.
+  Type type;
+
+  // The main symbol name. (e.g. "ns::foo" in "int ns::foo()".)
+  std::vector<String> symbol;
+
+  // We want to reduce number of memory allocations. To do so,
+  // we allocate a fixed number of Type instnaces as part of Demangler.
+  // If it needs more Type instances, we dynamically allocate instances
+  // and manage them using type_buffer2.
+  Type type_buffer[20];
+  size_t type_index = 0;
+  std::vector<std::unique_ptr<Type>> type_buffer2;
+
+  // The first 10 names in a mangled name can be back-referenced by
+  // special name @[0-9]. This is a storage for the first 10 names.
   std::vector<String> repeated_names;
 
-  // Writer
+  // Functions to convert Type to String.
   void write_pre(Type &type);
   void write_post(Type &type);
   void write_params(Type &type);
   void write_name(const std::vector<String> &name);
   void write_space();
 
+  // The result is written to this stream.
   std::stringstream os;
 };
 } // namespace
 
+// Parser entry point.
 void Demangler::parse() {
+  // MSVC-style mangled symbols must start with '?'.
   if (!consume("?")) {
     symbol.push_back(input);
     type.prim = Unknown;
   }
 
-  // Read a symbol name.
+  // What follows is a main symbol name. This may include
+  // namespaces or class names.
   symbol = read_name();
 
-  // Read a variable
+  // Read a variable.
   if (consume("3")) {
     read_var_type(type);
     return;
@@ -270,6 +300,17 @@ void Demangler::parse() {
   }
 }
 
+// Sometimes numbers are encoded in mangled symbols. For example,
+// "int (*x)[20]" is a valid C type (x is a pointer to an array of
+// length 20), so we need some way to embed numbers as part of symbols.
+// This function parses it.
+//
+// <number>               ::= [?] <non-negative integer>
+//
+// <non-negative integer> ::= <decimal digit> # when 1 <= Number <= 10
+//                        ::= <hex digit>+ @  # when Numbrer == 0 or >= 10
+//
+// <hex-digit>            ::= [A-P]           # A = 0, B = 1, ...
 int Demangler::read_number() {
   bool neg = consume("?");
 
@@ -299,6 +340,7 @@ int Demangler::read_number() {
 
 String Demangler::read_string() { return read_until("@"); }
 
+// Parses a name in the form of A@B@C@@ which represents C::B::A.
 std::vector<String> Demangler::read_name() {
   std::vector<String> v;
   while (!consume("@")) {
@@ -437,6 +479,7 @@ int8_t Demangler::read_storage_class_for_return() {
   return 0;
 }
 
+// Reads a variable type.
 void Demangler::read_var_type(Type &ty) {
   if (consume("T")) {
     ty.prim = Union;
@@ -552,6 +595,7 @@ void Demangler::read_var_type(Type &ty) {
   ty.prim = read_prim_type();
 }
 
+// Reads a primitive type.
 PrimTy Demangler::read_prim_type() {
   if (consume("X"))
     return Void;
@@ -614,6 +658,23 @@ PrimTy Demangler::read_prim_type() {
   return Unknown;
 }
 
+// Converts an AST to a string.
+//
+// Converting an AST representing a C++ type to a string is tricky due
+// to the bad grammar of the C++ declaration inherited from C. You have
+// to construct a string from inside to outside. For example, if a type
+// X is a pointer to a function returning int, the order you create a
+// string becomes something like this:
+//
+//   (1) X is a pointer: *X
+//   (2) (1) is a function returning int: int (*X)()
+//
+// So you cannot construct a result just by appending strings to a result.
+//
+// To deal with this, we split the function into two. write_pre() writes
+// the "first half" of type declaration, and write_post() writes the
+// "second half". For example, write_pre() writes a return type for a
+// function and write_post() writes an parameter list.
 std::string Demangler::str() {
   write_pre(type);
   write_name(symbol);
@@ -621,6 +682,7 @@ std::string Demangler::str() {
   return os.str();
 }
 
+// Write the "first half" of a given type.
 void Demangler::write_pre(Type &type) {
   switch (type.prim) {
   case Unknown:
@@ -755,6 +817,7 @@ void Demangler::write_pre(Type &type) {
   }
 }
 
+// Write the "second half" of a given type.
 void Demangler::write_post(Type &type) {
   if (type.prim == Function) {
     os << "(";
@@ -776,6 +839,7 @@ void Demangler::write_post(Type &type) {
   }
 }
 
+// Write a function or template parameter list.
 void Demangler::write_params(Type &type) {
   for (size_t i = 0; i < type.params.size(); ++i) {
     if (i != 0)
@@ -785,6 +849,7 @@ void Demangler::write_params(Type &type) {
   }
 }
 
+// Write a name read by read_name().
 void Demangler::write_name(const std::vector<String> &name) {
   if (name.empty())
     return;
@@ -793,6 +858,7 @@ void Demangler::write_name(const std::vector<String> &name) {
   for (size_t i = name.size() - 1; i != 0; --i)
     os << name[i] << "::";
 
+  // ?0 and ?1 are special names for ctors and dtors.
   if (name[0].startswith("?0"))
     os << name[0].substr(2) << "::" << name[0].substr(2);
   else if (name[0].startswith("?1"))
@@ -801,8 +867,9 @@ void Demangler::write_name(const std::vector<String> &name) {
     os << name[0];
 }
 
+// Writes a space if the last token does not end with a punctuation.
 void Demangler::write_space() {
-  std::string s = os.str();
+  std::string s = os.str();  // this is probably very slow, but OK for now
   if (!s.empty() && isalpha(s.back()))
     os << " ";
 }
