@@ -345,6 +345,10 @@ String Demangler::read_string() {
       continue;
     String ret = input.substr(0, i);
     input.trim(i + 1);
+
+    if (repeated_names.size() < 10)
+      repeated_names.push_back(ret);
+
     return ret;
   }
   error = "read_string: missing '@': " + input.str();
@@ -366,10 +370,9 @@ std::vector<String> Demangler::read_name() {
       continue;
     }
 
+    // Non-template functions or classes.
     String s = read_string();
     v.push_back(s);
-    if (repeated_names.size() < 10)
-      repeated_names.push_back(s);
   }
 
   std::reverse(v.begin(), v.end());
