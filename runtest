@@ -16,6 +16,7 @@ expect '?x@@YAXMH@Z' 'void x(float,int)'
 expect '?x@@YAXMH@Z' 'void x(float,int)'
 expect '?x@@3P6AHMNH@ZEA' 'int(*x)(float,double,int)'
 expect '?x@@3P6AHP6AHM@ZN@ZEA' 'int(*x)(int(*)(float),double)'
+#expect '?x@@3P6AHP6AHM@Z0@ZEA' 'int(*x)(int(*)(float),int(*)(float))'
 
 expect '?x@ns@@3HA' 'int ns::x'
 

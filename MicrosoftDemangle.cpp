@@ -41,6 +41,10 @@ public:
     return s.size() <= len && strncmp(p, s.data(), s.size()) == 0;
   }
 
+  bool startswith_digit() const {
+    return 0 < len && '0' <= p[0] && p[0] <= '9';
+  }
+
   String substr(size_t off) const { return {p + off, len - off}; }
   String substr(size_t off, size_t length) const { return {p + off, length}; }
 
@@ -194,7 +198,7 @@ private:
   void read_class(Type &ty, PrimTy prim);
   void read_pointee(Type &ty, PrimTy prim);
   void read_array(Type &ty);
-  std::vector<Type *> read_params(char end);
+  std::vector<Type *> read_params();
 
   Type *alloc() { return type_buffer + type_index++; }
 
@@ -274,12 +278,7 @@ void Demangler::parse() {
     type.ptr = alloc();
     type.ptr->sclass = read_storage_class_for_return();
     read_var_type(*type.ptr);
-
-    while (error.empty() && !input.empty() && !input.startswith('@')) {
-      Type *tp = alloc();
-      read_var_type(*tp);
-      type.params.push_back(tp);
-    }
+    type.params = read_params();
     return;
   }
 
@@ -292,7 +291,7 @@ void Demangler::parse() {
   type.ptr = alloc();
   type.ptr->sclass = read_storage_class();
   read_func_return_type(*type.ptr);
-  type.params = read_params('Z');
+  type.params = read_params();
 }
 
 // Sometimes numbers are encoded in mangled symbols. For example,
@@ -309,7 +308,7 @@ void Demangler::parse() {
 int Demangler::read_number() {
   bool neg = consume("?");
 
-  if (0 < input.len && '0' <= *input.p && *input.p <= '9') {
+  if (input.startswith_digit()) {
     int32_t ret = *input.p - '0' + 1;
     input.trim(1);
     return neg ? -ret : ret;
@@ -350,7 +349,7 @@ String Demangler::read_string() {
 std::vector<String> Demangler::read_name() {
   std::vector<String> v;
   while (!consume("@")) {
-    if (0 < input.len && '0' <= input.p[0] && input.p[0] <= '9') {
+    if (input.startswith_digit()) {
       int i = input.p[0] - '0';
       if (i >= repeated_names.size()) {
         error = "name reference too large: " + input.str();
@@ -500,12 +499,12 @@ void Demangler::read_var_type(Type &ty) {
     fn.prim = Function;
     fn.ptr = alloc();
     read_var_type(*fn.ptr);
+    fn.params = read_params();
 
-    while (error.empty() && !consume("@Z") && !consume("Z")) {
-      Type *tp = alloc();
-      read_var_type(*tp);
-      fn.params.push_back(tp);
-    }
+    if (input.startswith("@Z"))
+      input.trim(2);
+    else if (input.startswith("Z"))
+      input.trim(1);
     return;
   }
 
@@ -593,7 +592,7 @@ void Demangler::read_class(Type &ty, PrimTy prim) {
   // Class template.
   if (consume("?$")) {
     ty.name.push_back(read_string());
-    ty.params = read_params('@');
+    ty.params = read_params();
     return;
   }
 
@@ -636,12 +635,31 @@ void Demangler::read_array(Type &ty) {
   read_var_type(*tp);
 }
 
-std::vector<Type *> Demangler::read_params(char end) {
+std::vector<Type *> Demangler::read_params() {
+  Type *backref[10] = {};
+  size_t idx = 0;
+
   std::vector<Type *> ret;
-  while (error.empty() && !consume(end)) {
+  while (error.empty() && !input.startswith('@') && !input.startswith('Z')) {
+    if (input.startswith_digit()) {
+      int n = input.p[0] - '0';
+      if (n < 0 || 9 < n || !backref[n]) {
+        error = "invalid backreference: " + input.str();
+        return {};
+      }
+      input.trim(1);
+      ret.push_back(backref[n]);
+      continue;
+    }
+
+    size_t len = input.len;
+
     Type *tp = alloc();
     read_var_type(*tp);
     ret.push_back(tp);
+
+    if (input.len - len > 1 && idx <= 9)
+      backref[idx++] = tp;
   }
   return ret;
 }
