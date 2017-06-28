@@ -200,7 +200,13 @@ private:
   void read_array(Type &ty);
   std::vector<Type *> read_params();
 
-  Type *alloc() { return type_buffer + type_index++; }
+  Type *alloc() {
+    if (typebufidx < sizeof(typebuf) / sizeof(*typebuf))
+      return typebuf + typebufidx++;
+    Type *ty = new Type();
+    typebuf2.emplace_back(ty);
+    return ty;
+  }
 
   bool consume(const std::string &s) {
     if (!input.startswith(s))
@@ -226,13 +232,13 @@ private:
   // The main symbol name. (e.g. "ns::foo" in "int ns::foo()".)
   std::vector<String> symbol;
 
-  // We want to reduce number of memory allocations. To do so,
+  // We want to reduce the number of memory allocations. To do that,
   // we allocate a fixed number of Type instnaces as part of Demangler.
   // If it needs more Type instances, we dynamically allocate instances
-  // and manage them using type_buffer2.
-  Type type_buffer[20];
-  size_t type_index = 0;
-  std::vector<std::unique_ptr<Type>> type_buffer2;
+  // and manage them using typebuf2.
+  Type typebuf[20];
+  size_t typebufidx = 0;
+  std::vector<std::unique_ptr<Type>> typebuf2;
 
   // The first 10 names in a mangled name can be back-referenced by
   // special name @[0-9]. This is a storage for the first 10 names.
