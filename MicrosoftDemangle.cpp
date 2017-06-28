@@ -50,14 +50,14 @@ public:
     len -= n;
   }
 
-  int shift() {
+  int get() {
     if (len == 0)
       return -1;
     len--;
     return *p++;
   }
 
-  void unshift(int c) {
+  void unget(int c) {
     if (c == -1)
       return;
     len++;
@@ -372,7 +372,7 @@ std::vector<String> Demangler::read_name() {
 }
 
 int Demangler::read_func_class() {
-  switch (int c = input.shift()) {
+  switch (int c = input.get()) {
   case 'A':
     return Private;
   case 'B':
@@ -414,14 +414,14 @@ int Demangler::read_func_class() {
   case 'Z':
     return Global | FFar;
   default:
-    input.unshift(c);
+    input.unget(c);
     error = "unknown func class: " + input.str();
     return 0;
   }
 }
 
 CallingConv Demangler::read_calling_conv() {
-  switch (int c = input.shift()) {
+  switch (int c = input.get()) {
   case 'A':
     return Cdecl;
   case 'C':
@@ -433,7 +433,7 @@ CallingConv Demangler::read_calling_conv() {
   case 'I':
     return Fastcall;
   default:
-    input.unshift(c);
+    input.unget(c);
     error = "unknown calling convention: " + input.str();
     return Cdecl;
   }
@@ -451,7 +451,7 @@ void Demangler::read_func_return_type(Type &ty) {
 }
 
 int8_t Demangler::read_storage_class() {
-  switch (int c = input.shift()) {
+  switch (int c = input.get()) {
   case 'A':
     return 0;
   case 'B':
@@ -469,7 +469,7 @@ int8_t Demangler::read_storage_class() {
   case 'H':
     return Const | Volatile | Far;
   default:
-    input.unshift(c);
+    input.unget(c);
     return 0;
   }
 }
@@ -587,7 +587,7 @@ void Demangler::read_var_type(Type &ty) {
 
 // Reads a primitive type.
 PrimTy Demangler::read_prim_type() {
-  switch (int c = input.shift()) {
+  switch (int c = input.get()) {
   case 'X':
     return Void;
   case 'D':
@@ -615,7 +615,7 @@ PrimTy Demangler::read_prim_type() {
   case 'O':
     return Ldouble;
   default:
-    input.unshift(c);
+    input.unget(c);
     if (consume("_N"))
       return Bool;
     if (consume("_J"))
