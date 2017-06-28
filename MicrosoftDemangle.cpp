@@ -371,6 +371,8 @@ std::vector<String> Demangler::read_name() {
     if (repeated_names.size() < 10)
       repeated_names.push_back(s);
   }
+
+  std::reverse(v.begin(), v.end());
   return v;
 }
 
@@ -832,16 +834,17 @@ void Demangler::write_name(const std::vector<String> &name) {
     return;
   write_space();
 
-  for (size_t i = name.size() - 1; i != 0; --i)
+  for (size_t i = 0; i < name.size() - 1; ++i)
     os << name[i] << "::";
 
   // ?0 and ?1 are special names for ctors and dtors.
-  if (name[0].startswith("?0"))
-    os << name[0].substr(2) << "::" << name[0].substr(2);
-  else if (name[0].startswith("?1"))
-    os << name[0].substr(2) << "::~" << name[0].substr(2);
+  String s = name.back();
+  if (s.startswith("?0"))
+    os << s.substr(2) << "::" << s.substr(2);
+  else if (s.startswith("?1"))
+    os << s.substr(2) << "::~" << s.substr(2);
   else
-    os << name[0];
+    os << s;
 }
 
 // Writes a space if the last token does not end with a punctuation.
