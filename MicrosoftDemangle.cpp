@@ -57,6 +57,13 @@ public:
     return *p++;
   }
 
+  void unget(int c) {
+    if (c == -1)
+      return;
+    p--;
+    len++;
+  }
+
   const char *p = nullptr;
   size_t len = 0;
 };
@@ -367,8 +374,7 @@ std::vector<String> Demangler::read_name() {
 }
 
 int Demangler::read_func_class() {
-  String orig = input;
-  switch (input.get()) {
+  switch (int c = input.get()) {
   case 'A':
     return Private;
   case 'B':
@@ -410,14 +416,14 @@ int Demangler::read_func_class() {
   case 'Z':
     return Global | FFar;
   default:
-    error = "unknown func class: " + orig.str();
+    input.unget(c);
+    error = "unknown func class: " + input.str();
     return 0;
   }
 }
 
 CallingConv Demangler::read_calling_conv() {
-  String orig = input;
-  switch (input.get()) {
+  switch (int c = input.get()) {
   case 'A':
     return Cdecl;
   case 'C':
@@ -429,7 +435,8 @@ CallingConv Demangler::read_calling_conv() {
   case 'I':
     return Fastcall;
   default:
-    error = "unknown calling convention: " + orig.str();
+    input.unget(c);
+    error = "unknown calling convention: " + input.str();
     return Cdecl;
   }
 };
@@ -446,8 +453,7 @@ void Demangler::read_func_return_type(Type &ty) {
 }
 
 int8_t Demangler::read_storage_class() {
-  String orig = input;
-  switch (input.get()) {
+  switch (int c = input.get()) {
   case 'A':
     return 0;
   case 'B':
@@ -465,7 +471,7 @@ int8_t Demangler::read_storage_class() {
   case 'H':
     return Const | Volatile | Far;
   default:
-    input = orig;
+    input.unget(c);
     return 0;
   }
 }
@@ -507,8 +513,7 @@ void Demangler::read_var_type(Type &ty) {
     return;
   }
 
-  String orig = input;
-  switch (input.get()) {
+  switch (int c = input.get()) {
   case 'T':
     read_class(Union, ty);
     return;
@@ -532,7 +537,7 @@ void Demangler::read_var_type(Type &ty) {
     read_array(ty);
     return;
   default:
-    input = orig;
+    input.unget(c);
     ty.prim = read_prim_type();
     return;
   }
