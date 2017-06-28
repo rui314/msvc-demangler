@@ -587,7 +587,8 @@ void Demangler::read_var_type(Type &ty) {
 
 // Reads a primitive type.
 PrimTy Demangler::read_prim_type() {
-  switch (int c = input.get()) {
+  String orig = input;
+  switch (input.get()) {
   case 'X':
     return Void;
   case 'D':
@@ -614,18 +615,20 @@ PrimTy Demangler::read_prim_type() {
     return Double;
   case 'O':
     return Ldouble;
-  default:
-    input.unget(c);
-    if (consume("_N"))
+  case '_':
+    switch (input.get()) {
+    case 'N':
       return Bool;
-    if (consume("_J"))
+    case 'J':
       return Llong;
-    if (consume("_K"))
+    case 'K':
       return Ullong;
-    if (consume("_W"))
+    case 'W':
       return Wchar;
-
-    error = "unknown primitive type: " + input.str();
+    }
+    // fallthrough
+  default:
+    error = "unknown primitive type: " + orig.str();
     return Unknown;
   }
 }
