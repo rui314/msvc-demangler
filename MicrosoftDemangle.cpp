@@ -25,7 +25,7 @@
 class String {
 public:
   String() = default;
-  String(const String &other) = default;
+  String(const String &) = default;
   String(const std::string &s) : p(s.data()), len(s.size()) {}
   String(const char *p) : p(p), len(strlen(p)) {}
   String(const char *p, size_t len) : p(p), len(len) {}
@@ -141,6 +141,18 @@ enum FuncClass : uint8_t {
   FFar = 1 << 6,
 };
 
+namespace {
+struct Type;
+
+struct Name {
+  Name() = default;
+  Name(const Name &) = default;
+  Name(String s) : str(s) {}
+
+  String str;
+  std::vector<Type *> params;
+};
+
 // The type class. Mangled symbols are first parsed and converted to
 // this type and then converted to string.
 struct Type {
@@ -157,16 +169,15 @@ struct Type {
   int32_t len; // valid if prim == Array
 
   // Valid if prim is one of (Struct, Union, Class, Enum).
-  std::vector<String> name;
+  std::vector<Name> name;
 
   // Function or template parameters.
-  std::vector<struct Type *> params;
+  std::vector<Type *> params;
 };
 
 // Demangler class takes the main role in demangling symbols.
 // It has a set of functions to parse mangled symbols into Type instnaces.
 // It also has a set of functions to cnovert Type instances to strings.
-namespace {
 class Demangler {
 public:
   Demangler(String s) : input(s) {}
@@ -186,7 +197,7 @@ private:
 
   int read_number();
   String read_string();
-  std::vector<String> read_name();
+  std::vector<Name> read_name();
   String read_until(const std::string &s);
   PrimTy read_prim_type();
   int read_func_class();
@@ -230,7 +241,7 @@ private:
   Type type;
 
   // The main symbol name. (e.g. "ns::foo" in "int ns::foo()".)
-  std::vector<String> symbol;
+  std::vector<Name> symbol;
 
   // We want to reduce the number of memory allocations. To do that,
   // we allocate a fixed number of Type instnaces as part of Demangler.
@@ -247,8 +258,8 @@ private:
   // Functions to convert Type to String.
   void write_pre(Type &ty);
   void write_post(Type &ty);
-  void write_params(Type &ty);
-  void write_name(const std::vector<String> &name);
+  void write_params(const std::vector<Type *> &ty);
+  void write_name(const std::vector<Name> &name);
   void write_space();
 
   void write_class(const std::string &name, Type &ty);
@@ -356,8 +367,8 @@ String Demangler::read_string() {
 }
 
 // Parses a name in the form of A@B@C@@ which represents C::B::A.
-std::vector<String> Demangler::read_name() {
-  std::vector<String> v;
+std::vector<Name> Demangler::read_name() {
+  std::vector<Name> v;
   while (!consume("@")) {
     if (input.startswith_digit()) {
       int i = input.p[0] - '0';
@@ -366,13 +377,12 @@ std::vector<String> Demangler::read_name() {
         return {};
       }
       input.trim(1);
-      v.push_back(repeated_names[i]);
+      v.push_back({repeated_names[i]});
       continue;
     }
 
     // Non-template functions or classes.
-    String s = read_string();
-    v.push_back(s);
+    v.push_back({read_string()});
   }
 
   std::reverse(v.begin(), v.end());
@@ -803,7 +813,7 @@ void Demangler::write_pre(Type &ty) {
 void Demangler::write_post(Type &ty) {
   if (ty.prim == Function) {
     os << "(";
-    write_params(ty);
+    write_params(ty.params);
     os << ")";
     return;
   }
@@ -822,32 +832,43 @@ void Demangler::write_post(Type &ty) {
 }
 
 // Write a function or template parameter list.
-void Demangler::write_params(Type &ty) {
-  for (size_t i = 0; i < ty.params.size(); ++i) {
+void Demangler::write_params(const std::vector<Type *> &params) {
+  for (size_t i = 0; i < params.size(); ++i) {
     if (i != 0)
       os << ",";
-    write_pre(*ty.params[i]);
-    write_post(*ty.params[i]);
+    write_pre(*params[i]);
+    write_post(*params[i]);
   }
 }
 
 // Write a name read by read_name().
-void Demangler::write_name(const std::vector<String> &name) {
+void Demangler::write_name(const std::vector<Name> &name) {
   if (name.empty())
     return;
   write_space();
 
-  for (size_t i = 0; i < name.size() - 1; ++i)
-    os << name[i] << "::";
+  for (size_t i = 0; i < name.size() - 1; ++i) {
+    os << name[i].str;
+    write_params(name[i].params);
+    os << "::";
+  }
 
   // ?0 and ?1 are special names for ctors and dtors.
-  String s = name.back();
-  if (s.startswith("?0"))
-    os << s.substr(2) << "::" << s.substr(2);
-  else if (s.startswith("?1"))
-    os << s.substr(2) << "::~" << s.substr(2);
-  else
+  Name last = name.back();
+  if (last.str.startswith("?0")) {
+    String s = last.str.substr(2);
     os << s;
+    write_params(last.params);
+    os << "::" << s;
+  } else if (last.str.startswith("?1")) {
+    String s = last.str.substr(2);
+    os << s;
+    write_params(last.params);
+    os << "::~" << s;
+  } else {
+    os << last.str;
+    write_params(last.params);
+  }
 }
 
 // Writes a space if the last token does not end with a punctuation.
@@ -862,7 +883,7 @@ void Demangler::write_class(const std::string &name, Type &ty) {
   write_name(ty.name);
   if (!ty.params.empty()) {
     os << "<";
-    write_params(ty);
+    write_params(ty.params);
     os << ">";
   }
 }
