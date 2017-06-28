@@ -636,14 +636,14 @@ void Demangler::read_array(Type &ty) {
 }
 
 std::vector<Type *> Demangler::read_params() {
-  Type *backref[10] = {};
+  Type *backref[10];
   size_t idx = 0;
 
   std::vector<Type *> ret;
   while (error.empty() && !input.startswith('@') && !input.startswith('Z')) {
     if (input.startswith_digit()) {
       int n = input.p[0] - '0';
-      if (n < 0 || 9 < n || !backref[n]) {
+      if (n >= idx) {
         error = "invalid backreference: " + input.str();
         return {};
       }
@@ -658,7 +658,7 @@ std::vector<Type *> Demangler::read_params() {
     read_var_type(*tp);
     ret.push_back(tp);
 
-    if (input.len - len > 1 && idx <= 9)
+    if (idx <= 9 && input.len - len > 1)
       backref[idx++] = tp;
   }
   return ret;
