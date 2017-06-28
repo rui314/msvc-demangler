@@ -191,8 +191,8 @@ private:
   int8_t read_storage_class();
   int8_t read_storage_class_for_return();
 
-  void read_class(PrimTy prim, Type &ty);
-  void read_pointee(PrimTy prim, Type &ty);
+  void read_class(Type &ty, PrimTy prim);
+  void read_pointee(Type &ty, PrimTy prim);
   void read_array(Type &ty);
 
   Type *alloc() { return type_buffer + type_index++; }
@@ -515,22 +515,22 @@ void Demangler::read_var_type(Type &ty) {
 
   switch (int c = input.get()) {
   case 'T':
-    read_class(Union, ty);
+    read_class(ty, Union);
     return;
   case 'U':
-    read_class(Struct, ty);
+    read_class(ty, Struct);
     return;
   case 'V':
-    read_class(Class, ty);
+    read_class(ty, Class);
     return;
   case 'A':
-    read_pointee(Ref, ty);
+    read_pointee(ty, Ref);
     return;
   case 'P':
-    read_pointee(Ptr, ty);
+    read_pointee(ty, Ptr);
     return;
   case 'Q':
-    read_pointee(Ptr, ty);
+    read_pointee(ty, Ptr);
     ty.sclass = Const;
     return;
   case 'Y':
@@ -591,7 +591,7 @@ PrimTy Demangler::read_prim_type() {
   }
 }
 
-void Demangler::read_class(PrimTy prim, Type &ty) {
+void Demangler::read_class(Type &ty, PrimTy prim) {
   ty.prim = prim;
   if (consume("?$")) {
     ty.name.push_back(read_string());
@@ -605,7 +605,7 @@ void Demangler::read_class(PrimTy prim, Type &ty) {
   ty.name = read_name();
 }
 
-void Demangler::read_pointee(PrimTy prim, Type &ty) {
+void Demangler::read_pointee(Type &ty, PrimTy prim) {
   ty.prim = prim;
   consume("E"); // if 64 bit
   ty.ptr = alloc();
