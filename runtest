@@ -26,6 +26,8 @@ expect '?x@@3PEBHEB' 'int const*x'
 expect '?x@@3QEAHEB' 'int*const x'
 expect '?x@@3QEBHEB' 'int const*const x'
 
+expect '?x@@3AEBHEB' 'int const&x'
+
 expect '?x@@3PEAUty@@EA' 'struct ty*x'
 expect '?x@@3PEATty@@EA' 'union ty*x'
 expect '?x@@3PEAUty@@EA' 'struct ty*x'

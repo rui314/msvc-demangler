@@ -519,13 +519,6 @@ void Demangler::read_var_type(Type &ty) {
     return;
   }
 
-  if (consume("AEA")) {
-    ty.prim = Ref;
-    ty.ptr = alloc();
-    read_var_type(*ty.ptr);
-    return;
-  }
-
   if (consume("P6A")) {
     ty.prim = Ptr;
     ty.ptr = alloc();
@@ -540,6 +533,15 @@ void Demangler::read_var_type(Type &ty) {
       read_var_type(*tp);
       fn.params.push_back(tp);
     }
+    return;
+  }
+
+  if (consume("A")) {
+    ty.prim = Ref;
+    consume("E"); // if 64 bit
+    ty.ptr = alloc();
+    ty.ptr->sclass = read_storage_class();
+    read_var_type(*ty.ptr);
     return;
   }
 
