@@ -194,6 +194,7 @@ private:
   void read_class(Type &ty, PrimTy prim);
   void read_pointee(Type &ty, PrimTy prim);
   void read_array(Type &ty);
+  std::vector<Type *> read_params(char end);
 
   Type *alloc() { return type_buffer + type_index++; }
 
@@ -291,12 +292,7 @@ void Demangler::parse() {
   type.ptr = alloc();
   type.ptr->sclass = read_storage_class();
   read_func_return_type(*type.ptr);
-
-  while (error.empty() && !input.empty() && !input.startswith('Z')) {
-    Type *tp = alloc();
-    read_var_type(*tp);
-    type.params.push_back(tp);
-  }
+  type.params = read_params('Z');
 }
 
 // Sometimes numbers are encoded in mangled symbols. For example,
@@ -593,15 +589,15 @@ PrimTy Demangler::read_prim_type() {
 
 void Demangler::read_class(Type &ty, PrimTy prim) {
   ty.prim = prim;
+
+  // Class template.
   if (consume("?$")) {
     ty.name.push_back(read_string());
-    while (error.empty() && !consume("@")) {
-      Type *tp = alloc();
-      read_var_type(*tp);
-      ty.params.push_back(tp);
-    }
+    ty.params = read_params('@');
     return;
   }
+
+  // Non-template class.
   ty.name = read_name();
 }
 
@@ -638,6 +634,16 @@ void Demangler::read_array(Type &ty) {
   }
 
   read_var_type(*tp);
+}
+
+std::vector<Type *> Demangler::read_params(char end) {
+  std::vector<Type *> ret;
+  while (error.empty() && !consume(end)) {
+    Type *tp = alloc();
+    read_var_type(*tp);
+    ret.push_back(tp);
+  }
+  return ret;
 }
 
 // Converts an AST to a string.
