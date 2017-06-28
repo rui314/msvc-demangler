@@ -185,6 +185,8 @@ private:
   int8_t read_storage_class_for_return();
 
   void read_class(PrimTy prim, Type &ty);
+  void read_pointee(PrimTy prim, Type &ty);
+  void read_array(Type &ty);
 
   Type *alloc() { return type_buffer + type_index++; }
 
@@ -482,21 +484,6 @@ int8_t Demangler::read_storage_class_for_return() {
 
 // Reads a variable type.
 void Demangler::read_var_type(Type &ty) {
-  if (consume("T")) {
-    read_class(Union, ty);
-    return;
-  }
-
-  if (consume("U")) {
-    read_class(Struct, ty);
-    return;
-  }
-
-  if (consume("V")) {
-    read_class(Class, ty);
-    return;
-  }
-
   if (consume("W4")) {
     ty.prim = Enum;
     ty.name = read_name();
@@ -520,63 +507,35 @@ void Demangler::read_var_type(Type &ty) {
     return;
   }
 
-  if (consume("A")) {
-    ty.prim = Ref;
-    consume("E"); // if 64 bit
-    ty.ptr = alloc();
-    ty.ptr->sclass = read_storage_class();
-    read_var_type(*ty.ptr);
+  String orig = input;
+  switch (input.get()) {
+  case 'T':
+    read_class(Union, ty);
     return;
-  }
-
-  if (consume("P")) {
-    ty.prim = Ptr;
-    consume("E");  // if 64 bit
-    ty.ptr = alloc();
-    ty.ptr->sclass = read_storage_class();
-    read_var_type(*ty.ptr);
+  case 'U':
+    read_class(Struct, ty);
     return;
-  }
-
-  if (consume("Q")) {
-    ty.prim = Ptr;
+  case 'V':
+    read_class(Class, ty);
+    return;
+  case 'A':
+    read_pointee(Ref, ty);
+    return;
+  case 'P':
+    read_pointee(Ptr, ty);
+    return;
+  case 'Q':
+    read_pointee(Ptr, ty);
     ty.sclass = Const;
-    consume("E"); // if 64 bit
-    ty.ptr = alloc();
-    ty.ptr->sclass = read_storage_class();
-    read_var_type(*ty.ptr);
+    return;
+  case 'Y':
+    read_array(ty);
+    return;
+  default:
+    input = orig;
+    ty.prim = read_prim_type();
     return;
   }
-
-  if (consume("Y")) {
-    int dimension = read_number();
-    if (dimension <= 0) {
-      error = "invalid array dimension: " + std::to_string(dimension);
-      return;
-    }
-
-    Type *tp = &ty;
-    for (int i = 0; i < dimension; ++i) {
-      tp->prim = Array;
-      tp->len = read_number();
-      tp->ptr = alloc();
-      tp = tp->ptr;
-    }
-
-    if (consume("$$C")) {
-      if (consume("B"))
-        ty.sclass = Const;
-      else if (consume("C") || consume("D"))
-        ty.sclass = Const | Volatile;
-      else if (!consume("A"))
-        error = "unkonwn storage class: " + input.str();
-    }
-
-    read_var_type(*tp);
-    return;
-  }
-
-  ty.prim = read_prim_type();
 }
 
 // Reads a primitive type.
@@ -639,6 +598,41 @@ void Demangler::read_class(PrimTy prim, Type &ty) {
     return;
   }
   ty.name = read_name();
+}
+
+void Demangler::read_pointee(PrimTy prim, Type &ty) {
+  ty.prim = prim;
+  consume("E"); // if 64 bit
+  ty.ptr = alloc();
+  ty.ptr->sclass = read_storage_class();
+  read_var_type(*ty.ptr);
+}
+
+void Demangler::read_array(Type &ty) {
+  int dimension = read_number();
+  if (dimension <= 0) {
+    error = "invalid array dimension: " + std::to_string(dimension);
+    return;
+  }
+
+  Type *tp = &ty;
+  for (int i = 0; i < dimension; ++i) {
+    tp->prim = Array;
+    tp->len = read_number();
+    tp->ptr = alloc();
+    tp = tp->ptr;
+  }
+
+  if (consume("$$C")) {
+    if (consume("B"))
+      ty.sclass = Const;
+    else if (consume("C") || consume("D"))
+      ty.sclass = Const | Volatile;
+    else if (!consume("A"))
+      error = "unkonwn storage class: " + input.str();
+  }
+
+  read_var_type(*tp);
 }
 
 // Converts an AST to a string.
