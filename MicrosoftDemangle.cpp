@@ -552,12 +552,13 @@ void Demangler::read_var_type(Type &ty) {
     return;
   }
 
-  if (consume("QEB")) {
+  if (consume("Q")) {
     ty.prim = Ptr;
     ty.sclass = Const;
+    consume("E"); // if 64 bit
     ty.ptr = alloc();
+    ty.ptr->sclass = read_storage_class();
     read_var_type(*ty.ptr);
-    ty.ptr->sclass = Const;
     return;
   }
 

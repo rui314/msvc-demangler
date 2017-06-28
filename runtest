@@ -23,6 +23,7 @@ expect '?x@ns@@3HA' 'int ns::x'
 # I believe it's their bug.
 expect '?x@@3PEBHEB' 'int const*x'
 
+expect '?x@@3QEAHEB' 'int*const x'
 expect '?x@@3QEBHEB' 'int const*const x'
 
 expect '?x@@3PEAUty@@EA' 'struct ty*x'
