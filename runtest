@@ -35,6 +35,8 @@ expect '?x@@3PEAW4ty@@EA' 'enum ty*x'
 expect '?x@@3PEAVty@@EA' 'class ty*x'
 
 expect '?x@@3PEAV?$tmpl@H@@EA' 'class tmpl<int>*x'
+expect '?x@@3PEAU?$tmpl@H@@EA' 'struct tmpl<int>*x'
+expect '?x@@3PEAT?$tmpl@H@@EA' 'union tmpl<int>*x'
 expect '?instance@@3Vklass@@A' 'class klass instance'
 expect '?instance$initializer$@@3P6AXXZEA' 'void(*instance$initializer$)(void)'
 expect '??0klass@@QEAA@XZ' 'klass::klass(void)'

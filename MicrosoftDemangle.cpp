@@ -191,6 +191,8 @@ private:
   int8_t read_storage_class();
   int8_t read_storage_class_for_return();
 
+  void read_class(PrimTy prim, Type &ty);
+
   Type *alloc() { return type_buffer + type_index++; }
 
   bool consume(const std::string &s) {
@@ -235,6 +237,8 @@ private:
   void write_params(Type &ty);
   void write_name(const std::vector<String> &name);
   void write_space();
+
+  void write_class(const std::string &name, Type &ty);
 
   // The result is written to this stream.
   std::stringstream os;
@@ -485,31 +489,17 @@ int8_t Demangler::read_storage_class_for_return() {
 // Reads a variable type.
 void Demangler::read_var_type(Type &ty) {
   if (consume("T")) {
-    ty.prim = Union;
-    ty.name = read_name();
+    read_class(Union, ty);
     return;
   }
 
   if (consume("U")) {
-    ty.prim = Struct;
-    ty.name = read_name();
+    read_class(Struct, ty);
     return;
   }
 
   if (consume("V")) {
-    ty.prim = Class;
-
-    if (consume("?$")) {
-      ty.name.push_back(read_string());
-      while (error.empty() && !consume("@")) {
-        Type *tp = alloc();
-        read_var_type(*tp);
-        ty.params.push_back(tp);
-      }
-      return;
-    }
-
-    ty.name = read_name();
+    read_class(Class, ty);
     return;
   }
 
@@ -640,6 +630,20 @@ PrimTy Demangler::read_prim_type() {
   }
 }
 
+void Demangler::read_class(PrimTy prim, Type &ty) {
+  ty.prim = prim;
+  if (consume("?$")) {
+    ty.name.push_back(read_string());
+    while (error.empty() && !consume("@")) {
+      Type *tp = alloc();
+      read_var_type(*tp);
+      ty.params.push_back(tp);
+    }
+    return;
+  }
+  ty.name = read_name();
+}
+
 // Converts an AST to a string.
 //
 // Converting an AST representing a C++ type to a string is tricky due
@@ -693,21 +697,13 @@ void Demangler::write_pre(Type &ty) {
     write_pre(*ty.ptr);
     break;
   case Struct:
-    os << "struct ";
-    write_name(ty.name);
+    write_class("struct", ty);
     break;
   case Union:
-    os << "union ";
-    write_name(ty.name);
+    write_class("union", ty);
     break;
   case Class:
-    os << "class ";
-    write_name(ty.name);
-    if (!ty.params.empty()) {
-      os << "<";
-      write_params(ty);
-      os << ">";
-    }
+    write_class("class", ty);
     break;
   case Enum:
     os << "enum ";
@@ -827,6 +823,16 @@ void Demangler::write_space() {
   std::string s = os.str();  // this is probably very slow, but OK for now
   if (!s.empty() && isalpha(s.back()))
     os << " ";
+}
+
+void Demangler::write_class(const std::string &name, Type &ty) {
+  os << name << " ";
+  write_name(ty.name);
+  if (!ty.params.empty()) {
+    os << "<";
+    write_params(ty);
+    os << ">";
+  }
 }
 
 int main(int argc, char **argv) {
