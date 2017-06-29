@@ -382,6 +382,14 @@ std::vector<Name> Demangler::read_name() {
       continue;
     }
 
+    // Class template.
+    if (consume("?$")) {
+      v.push_back(read_string());
+      v.back().params = read_params();
+      consume("@");
+      continue;
+    }
+
     // Non-template functions or classes.
     v.push_back({read_string()});
   }
@@ -610,16 +618,6 @@ PrimTy Demangler::read_prim_type() {
 
 void Demangler::read_class(Type &ty, PrimTy prim) {
   ty.prim = prim;
-
-  // Class template.
-  if (consume("?$")) {
-    Name name = read_string();
-    name.params = read_params();
-    ty.name.push_back(name);
-    return;
-  }
-
-  // Non-template class.
   ty.name = read_name();
 }
 
