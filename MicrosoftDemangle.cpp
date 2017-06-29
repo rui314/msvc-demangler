@@ -226,11 +226,9 @@ private:
     return true;
   }
 
-  bool consume(char c) {
-    if (!input.startswith(c))
-      return false;
-    input.trim(1);
-    return true;
+  void expect(const std::string &s) {
+    if (!consume(s))
+      error = s + " expected, but got " + input.str();
   }
 
   // Mangled symbol. read_* functions shorten this string
@@ -303,7 +301,7 @@ void Demangler::parse() {
   // Read a member function.
   type.prim = Function;
   type.func_class = (FuncClass)read_func_class();
-  consume("E"); // if 64 bit
+  expect("E"); // if 64 bit
   type.calling_conv = read_calling_conv();
 
   type.ptr = alloc();
@@ -386,7 +384,7 @@ std::vector<Name> Demangler::read_name() {
     if (consume("?$")) {
       v.push_back(read_string());
       v.back().params = read_params();
-      consume("@");
+      expect("@");
       continue;
     }
 
@@ -474,7 +472,7 @@ void Demangler::read_func_return_type(Type &ty) {
     return;
   }
   read_var_type(ty);
-  consume("@"); // expect
+  expect("@");
 }
 
 int8_t Demangler::read_storage_class() {
@@ -623,7 +621,7 @@ void Demangler::read_class(Type &ty, PrimTy prim) {
 
 void Demangler::read_pointee(Type &ty, PrimTy prim) {
   ty.prim = prim;
-  consume("E"); // if 64 bit
+  expect("E"); // if 64 bit
   ty.ptr = alloc();
   ty.ptr->sclass = read_storage_class();
   read_var_type(*ty.ptr);
