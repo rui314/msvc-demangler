@@ -171,7 +171,7 @@ struct Type {
   // Valid if prim is one of (Struct, Union, Class, Enum).
   std::vector<Name> name;
 
-  // Function or template parameters.
+  // Function parameters.
   std::vector<Type *> params;
 };
 
@@ -260,6 +260,7 @@ private:
   void write_post(Type &ty);
   void write_params(const std::vector<Type *> &ty);
   void write_name(const std::vector<Name> &name);
+  void write_template_params(const Name &name);
   void write_space();
 
   void write_class(const std::string &name, Type &ty);
@@ -612,8 +613,9 @@ void Demangler::read_class(Type &ty, PrimTy prim) {
 
   // Class template.
   if (consume("?$")) {
-    ty.name.push_back(read_string());
-    ty.params = read_params();
+    Name name = read_string();
+    name.params = read_params();
+    ty.name.push_back(name);
     return;
   }
 
@@ -849,7 +851,7 @@ void Demangler::write_name(const std::vector<Name> &name) {
 
   for (size_t i = 0; i < name.size() - 1; ++i) {
     os << name[i].str;
-    write_params(name[i].params);
+    write_template_params(name[i]);
     os << "::";
   }
 
@@ -867,8 +869,16 @@ void Demangler::write_name(const std::vector<Name> &name) {
     os << "::~" << s;
   } else {
     os << last.str;
-    write_params(last.params);
+    write_template_params(last);
   }
+}
+
+void Demangler::write_template_params(const Name &name) {
+  if (name.params.empty())
+    return;
+  os << "<";
+  write_params(name.params);
+  os << ">";
 }
 
 // Writes a space if the last token does not end with a punctuation.
@@ -883,7 +893,6 @@ void Demangler::write_class(const std::string &name, Type &ty) {
   write_name(ty.name);
   if (!ty.params.empty()) {
     os << "<";
-    write_params(ty.params);
     os << ">";
   }
 }
