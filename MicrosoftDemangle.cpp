@@ -48,6 +48,10 @@ public:
   String substr(size_t off) const { return {p + off, len - off}; }
   String substr(size_t off, size_t length) const { return {p + off, length}; }
 
+  bool operator==(const String s) const {
+    return len == s.len && memcmp(p, s.p, len) == 0;
+  }
+
   void trim(size_t n) {
     assert(n <= len);
     p += n;
@@ -196,7 +200,8 @@ private:
   void read_member_func_type(Type &ty);
 
   int read_number();
-  String read_string();
+  String read_string(bool memorize);
+  void memorize_string(String s);
   std::vector<Name> read_name();
   String read_until(const std::string &s);
   PrimTy read_prim_type();
@@ -351,20 +356,28 @@ int Demangler::read_number() {
 }
 
 // Read until the next '@'.
-String Demangler::read_string() {
+String Demangler::read_string(bool memorize) {
   for (size_t i = 0; i < input.len; ++i) {
     if (input.p[i] != '@')
       continue;
     String ret = input.substr(0, i);
     input.trim(i + 1);
 
-    if (repeated_names.size() < 10)
-      repeated_names.push_back(ret);
-
+    if (memorize)
+      memorize_string(ret);
     return ret;
   }
   error = "read_string: missing '@': " + input.str();
   return "";
+}
+
+void Demangler::memorize_string(String s) {
+  if (repeated_names.size() >= 10)
+    return;
+  for (String t : repeated_names)
+    if (s == t)
+      return;
+  repeated_names.push_back(s);
 }
 
 // Parses a name in the form of A@B@C@@ which represents C::B::A.
@@ -384,14 +397,14 @@ std::vector<Name> Demangler::read_name() {
 
     // Class template.
     if (consume("?$")) {
-      v.push_back(read_string());
+      v.push_back(read_string(false));
       v.back().params = read_params();
       expect("@");
       continue;
     }
 
     // Non-template functions or classes.
-    v.push_back({read_string()});
+    v.push_back({read_string(true)});
   }
 
   std::reverse(v.begin(), v.end());
