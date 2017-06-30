@@ -184,13 +184,8 @@ struct Type;
 
 // Represents an identifier which may be a template.
 struct Name {
-  Name() = default;
-  Name(const Name &) = default;
-  Name(String s) : str(s) {}
-
   String str;
   Type *params = nullptr;
-
   Name *next = nullptr;
 };
 
@@ -301,7 +296,8 @@ private:
 void Demangler::parse() {
   // MSVC-style mangled symbols must start with '?'.
   if (!consume("?")) {
-    symbol = new (arena) Name(input);
+    symbol = new (arena) Name;
+    symbol->str = input;
     type.prim = Unknown;
   }
 
@@ -415,7 +411,8 @@ Name *Demangler::read_name() {
       }
       input.trim(1);
 
-      Name *elem = new (arena) Name(repeated_names[i]);
+      Name *elem = new (arena) Name();
+      elem->str = repeated_names[i];
       elem->next = head;
       head = elem;
       continue;
@@ -423,7 +420,8 @@ Name *Demangler::read_name() {
 
     // Class template.
     if (consume("?$")) {
-      Name *elem = new (arena) Name(read_string(false));
+      Name *elem = new (arena) Name;
+      elem->str = read_string(false);
       elem->params = read_params();
       elem->next = head;
       head = elem;
@@ -432,7 +430,8 @@ Name *Demangler::read_name() {
     }
 
     // Non-template functions or classes.
-    Name *elem = new (arena) Name(read_string(true));
+    Name *elem = new (arena) Name;
+    elem->str = read_string(true);
     elem->next = head;
     head = elem;
   }
