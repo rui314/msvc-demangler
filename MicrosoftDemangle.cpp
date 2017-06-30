@@ -148,6 +148,7 @@ enum FuncClass : uint8_t {
 namespace {
 struct Type;
 
+// Represents an identifier which may be a template.
 struct Name {
   Name() = default;
   Name(const Name &) = default;
@@ -173,7 +174,7 @@ struct Type {
   int32_t len; // valid if prim == Array
 
   // Valid if prim is one of (Struct, Union, Class, Enum).
-  std::vector<Name> name;
+  std::vector<Name *> name;
 
   // Function parameters.
   std::vector<Type *> params;
@@ -202,7 +203,7 @@ private:
   int read_number();
   String read_string(bool memorize);
   void memorize_string(String s);
-  std::vector<Name> read_name();
+  std::vector<Name *> read_name();
   String read_until(const std::string &s);
   PrimTy read_prim_type();
   int read_func_class();
@@ -216,14 +217,6 @@ private:
   void read_pointee(Type &ty, PrimTy prim);
   void read_array(Type &ty);
   std::vector<Type *> read_params();
-
-  Type *alloc() {
-    if (typebufidx < sizeof(typebuf) / sizeof(*typebuf))
-      return typebuf + typebufidx++;
-    Type *ty = new Type();
-    typebuf2.emplace_back(ty);
-    return ty;
-  }
 
   bool consume(const std::string &s) {
     if (!input.startswith(s))
@@ -245,15 +238,34 @@ private:
   Type type;
 
   // The main symbol name. (e.g. "ns::foo" in "int ns::foo()".)
-  std::vector<Name> symbol;
+  std::vector<Name *> symbol;
 
   // We want to reduce the number of memory allocations. To do that,
   // we allocate a fixed number of Type instnaces as part of Demangler.
   // If it needs more Type instances, we dynamically allocate instances
   // and manage them using typebuf2.
+  Type *alloc_type() {
+    if (typebufidx < sizeof(typebuf) / sizeof(*typebuf))
+      return typebuf + typebufidx++;
+    Type *ty = new Type();
+    typebuf2.emplace_back(ty);
+    return ty;
+  }
   Type typebuf[20];
   size_t typebufidx = 0;
   std::vector<std::unique_ptr<Type>> typebuf2;
+
+  Name *alloc_name() {
+    if (namebufidx < sizeof(namebuf) / sizeof(*namebuf))
+      return namebuf + namebufidx++;
+    Name *ty = new Name();
+    namebuf2.emplace_back(ty);
+    return ty;
+  }
+
+  Name namebuf[20];
+  size_t namebufidx = 0;
+  std::vector<std::unique_ptr<Name>> namebuf2;
 
   // The first 10 names in a mangled name can be back-referenced by
   // special name @[0-9]. This is a storage for the first 10 names.
@@ -263,7 +275,7 @@ private:
   void write_pre(Type &ty);
   void write_post(Type &ty);
   void write_params(const std::vector<Type *> &ty);
-  void write_name(const std::vector<Name> &name);
+  void write_name(const std::vector<Name *> &name);
   void write_template_params(const Name &name);
   void write_space();
 
@@ -278,7 +290,9 @@ private:
 void Demangler::parse() {
   // MSVC-style mangled symbols must start with '?'.
   if (!consume("?")) {
-    symbol.push_back(input);
+    Name *name = alloc_name();
+    name->str = input;
+    symbol.push_back(name);
     type.prim = Unknown;
   }
 
@@ -297,7 +311,7 @@ void Demangler::parse() {
     type.prim = Function;
     type.calling_conv = read_calling_conv();
 
-    type.ptr = alloc();
+    type.ptr = alloc_type();
     type.ptr->sclass = read_storage_class_for_return();
     read_var_type(*type.ptr);
     type.params = read_params();
@@ -311,7 +325,7 @@ void Demangler::parse() {
   type.sclass = read_func_access_class();
   type.calling_conv = read_calling_conv();
 
-  type.ptr = alloc();
+  type.ptr = alloc_type();
   type.ptr->sclass = read_storage_class();
   read_func_return_type(*type.ptr);
   type.params = read_params();
@@ -381,8 +395,8 @@ void Demangler::memorize_string(String s) {
 }
 
 // Parses a name in the form of A@B@C@@ which represents C::B::A.
-std::vector<Name> Demangler::read_name() {
-  std::vector<Name> v;
+std::vector<Name *> Demangler::read_name() {
+  std::vector<Name *> v;
   while (!consume("@")) {
     if (input.startswith_digit()) {
       int i = input.p[0] - '0';
@@ -391,20 +405,27 @@ std::vector<Name> Demangler::read_name() {
         return {};
       }
       input.trim(1);
-      v.push_back({repeated_names[i]});
+
+      Name *name = alloc_name();
+      name->str = repeated_names[i];
+      v.push_back(name);
       continue;
     }
 
     // Class template.
     if (consume("?$")) {
-      v.push_back(read_string(false));
-      v.back().params = read_params();
+      Name *name = alloc_name();
+      name->str = read_string(false);
+      name->params = read_params();
+      v.push_back(name);
       expect("@");
       continue;
     }
 
     // Non-template functions or classes.
-    v.push_back({read_string(true)});
+    Name *name = alloc_name();
+    name->str = read_string(true);
+    v.push_back(name);
   }
 
   std::reverse(v.begin(), v.end());
@@ -547,11 +568,11 @@ void Demangler::read_var_type(Type &ty) {
 
   if (consume("P6A")) {
     ty.prim = Ptr;
-    ty.ptr = alloc();
+    ty.ptr = alloc_type();
 
     Type &fn = *ty.ptr;
     fn.prim = Function;
-    fn.ptr = alloc();
+    fn.ptr = alloc_type();
     read_var_type(*fn.ptr);
     fn.params = read_params();
 
@@ -648,7 +669,7 @@ void Demangler::read_class(Type &ty, PrimTy prim) {
 void Demangler::read_pointee(Type &ty, PrimTy prim) {
   ty.prim = prim;
   expect("E"); // if 64 bit
-  ty.ptr = alloc();
+  ty.ptr = alloc_type();
   ty.ptr->sclass = read_storage_class();
   read_var_type(*ty.ptr);
 }
@@ -664,7 +685,7 @@ void Demangler::read_array(Type &ty) {
   for (int i = 0; i < dimension; ++i) {
     tp->prim = Array;
     tp->len = read_number();
-    tp->ptr = alloc();
+    tp->ptr = alloc_type();
     tp = tp->ptr;
   }
 
@@ -699,7 +720,7 @@ std::vector<Type *> Demangler::read_params() {
 
     size_t len = input.len;
 
-    Type *tp = alloc();
+    Type *tp = alloc_type();
     read_var_type(*tp);
     ret.push_back(tp);
 
@@ -868,32 +889,32 @@ void Demangler::write_params(const std::vector<Type *> &params) {
 }
 
 // Write a name read by read_name().
-void Demangler::write_name(const std::vector<Name> &name) {
+void Demangler::write_name(const std::vector<Name *> &name) {
   if (name.empty())
     return;
   write_space();
 
   for (size_t i = 0; i < name.size() - 1; ++i) {
-    os << name[i].str;
-    write_template_params(name[i]);
+    os << name[i]->str;
+    write_template_params(*name[i]);
     os << "::";
   }
 
   // ?0 and ?1 are special names for ctors and dtors.
-  Name last = name.back();
-  if (last.str.startswith("?0")) {
-    String s = last.str.substr(2);
+  Name *last = name.back();
+  if (last->str.startswith("?0")) {
+    String s = last->str.substr(2);
     os << s;
-    write_params(last.params);
+    write_params(last->params);
     os << "::" << s;
-  } else if (last.str.startswith("?1")) {
-    String s = last.str.substr(2);
+  } else if (last->str.startswith("?1")) {
+    String s = last->str.substr(2);
     os << s;
-    write_params(last.params);
+    write_params(last->params);
     os << "::~" << s;
   } else {
-    os << last.str;
-    write_template_params(last);
+    os << last->str;
+    write_template_params(*last);
   }
 }
 
@@ -907,7 +928,7 @@ void Demangler::write_template_params(const Name &name) {
 
 // Writes a space if the last token does not end with a punctuation.
 void Demangler::write_space() {
-  std::string s = os.str();  // this is probably very slow, but OK for now
+  std::string s = os.str();
   if (!s.empty() && isalpha(s.back()))
     os << " ";
 }
