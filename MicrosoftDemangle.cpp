@@ -278,7 +278,8 @@ private:
 
   // The first 10 names in a mangled name can be back-referenced by
   // special name @[0-9]. This is a storage for the first 10 names.
-  std::vector<String> repeated_names;
+  String names[10];
+  int num_names = 0;
 
   // Functions to convert Type to String.
   void write_pre(Type &ty);
@@ -391,12 +392,12 @@ String Demangler::read_string(bool memorize) {
 }
 
 void Demangler::memorize_string(String s) {
-  if (repeated_names.size() >= 10)
+  if (num_names >= 10)
     return;
-  for (String t : repeated_names)
-    if (s == t)
+  for (int i = 0; i < num_names; ++i)
+    if (s == names[i])
       return;
-  repeated_names.push_back(s);
+  names[num_names++] = s;
 }
 
 // Parses a name in the form of A@B@C@@ which represents C::B::A.
@@ -406,14 +407,14 @@ Name *Demangler::read_name() {
   while (!consume("@")) {
     if (input.startswith_digit()) {
       int i = input.p[0] - '0';
-      if (i >= repeated_names.size()) {
+      if (i >= num_names) {
         error = "name reference too large: " + input.str();
         return {};
       }
       input.trim(1);
 
       Name *elem = new (arena) Name;
-      elem->str = repeated_names[i];
+      elem->str = names[i];
       elem->next = head;
       head = elem;
       continue;
