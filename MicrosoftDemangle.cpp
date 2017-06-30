@@ -161,8 +161,8 @@ enum PrimTy : uint8_t {
   Uint,
   Long,
   Ulong,
-  Llong,
-  Ullong,
+  Int64,
+  Uint64,
   Wchar,
   Float,
   Double,
@@ -186,6 +186,7 @@ struct Type;
 // Represents an identifier which may be a template.
 struct Name {
   String str;
+  String op;
   Type *params = nullptr;
   Name *next = nullptr;
 };
@@ -238,6 +239,8 @@ private:
   String read_string(bool memorize);
   void memorize_string(String s);
   Name *read_name();
+  void read_operator(Name *);
+  String read_operator_name();
   String read_until(const std::string &s);
   PrimTy read_prim_type();
   int read_func_class();
@@ -288,6 +291,7 @@ private:
   void write_params(Type *ty);
   void write_name(Name *name);
   void write_tmpl_params(Name *name);
+  void write_operator(Name *name);
   void write_space();
 
   // The result is written to this stream.
@@ -406,6 +410,8 @@ Name *Demangler::read_name() {
   Name *head = nullptr;
 
   while (!consume("@")) {
+    Name *elem = new (arena) Name;
+
     if (input.startswith_digit()) {
       int i = input.p[0] - '0';
       if (i >= num_names) {
@@ -413,33 +419,99 @@ Name *Demangler::read_name() {
         return {};
       }
       input.trim(1);
-
-      Name *elem = new (arena) Name;
       elem->str = names[i];
-      elem->next = head;
-      head = elem;
-      continue;
-    }
-
-    // Class template.
-    if (consume("?$")) {
-      Name *elem = new (arena) Name;
+    } else if (consume("?$")) {
+      // Class template.
       elem->str = read_string(false);
       elem->params = read_params();
-      elem->next = head;
-      head = elem;
       expect("@");
-      continue;
+    } else if (consume("?")) {
+      // Overloaded operator.
+      read_operator(elem);
+    } else {
+      // Non-template functions or classes.
+      elem->str = read_string(true);
     }
 
-    // Non-template functions or classes.
-    Name *elem = new (arena) Name;
-    elem->str = read_string(true);
     elem->next = head;
     head = elem;
   }
 
   return head;
+}
+
+void Demangler::read_operator(Name *name) {
+  if (consume("0")) {
+    name->op = "ctor";
+    name->str = read_string(true);
+    return;
+  }
+
+  if (consume("1")) {
+    name->op = "dtor";
+    name->str = read_string(true);
+    return;
+  }
+
+  name->op = read_operator_name();
+}
+
+String Demangler::read_operator_name() {
+  String orig = input;
+
+  switch (input.get()) {
+  case '2': return " new";
+  case '3': return " delete";
+  case '4': return "=";
+  case '5': return ">>";
+  case '6': return "<<";
+  case '7': return "!";
+  case '8': return "==";
+  case '9': return "!=";
+  case 'A': return "[]";
+  case 'C': return "->";
+  case 'D': return "*";
+  case 'E': return "++";
+  case 'F': return "--";
+  case 'G': return "-";
+  case 'H': return "+";
+  case 'I': return "&";
+  case 'J': return "->*";
+  case 'K': return "/";
+  case 'L': return "%";
+  case 'M': return "<";
+  case 'N': return "<=";
+  case 'O': return ">";
+  case 'P': return ">=";
+  case 'Q': return ",";
+  case 'R': return "()";
+  case 'S': return "~";
+  case 'T': return "^";
+  case 'U': return "|";
+  case 'V': return "&&";
+  case 'W': return "||";
+  case 'X': return "*=";
+  case 'Y': return "+=";
+  case 'Z': return "-=";
+  case '_':
+    switch (input.get()) {
+    case '0': return "/=";
+    case '1': return "%=";
+    case '2': return ">>=";
+    case '3': return "<<=";
+    case '4': return "&=";
+    case '5': return "|=";
+    case '6': return "^=";
+    case 'U': return " new[]";
+    case 'V': return " delete[]";
+    case '_':
+      if (consume("L"))
+        return " co_await";
+    }
+  }
+
+  error = "unknown operator name: " + orig.str();
+  return "";
 }
 
 int Demangler::read_func_class() {
@@ -610,8 +682,8 @@ PrimTy Demangler::read_prim_type() {
   case '_':
     switch (input.get()) {
     case 'N': return Bool;
-    case 'J': return Llong;
-    case 'K': return Ullong;
+    case 'J': return Int64;
+    case 'K': return Uint64;
     case 'W': return Wchar;
     }
     // fallthrough
@@ -761,8 +833,8 @@ void Demangler::write_pre(Type &ty) {
   case Uint:    os << "unsigned int"; break;
   case Long:    os << "long"; break;
   case Ulong:   os << "unsigned long"; break;
-  case Llong:   os << "long long"; break;
-  case Ullong:  os << "unsigned long long"; break;
+  case Int64:   os << "int64"; break;
+  case Uint64:  os << "uint64"; break;
   case Wchar:   os << "wchar_t"; break;
   case Float:   os << "float"; break;
   case Double:  os << "double"; break;
@@ -826,21 +898,23 @@ void Demangler::write_name(Name *name) {
     os << "::";
   }
 
-  // ?0 and ?1 are special names for ctors and dtors.
-  if (name->str.startswith("?0")) {
-    String s = name->str.substr(2);
-    os << s;
-    write_params(name->params);
-    os << "::" << s;
-  } else if (name->str.startswith("?1")) {
-    String s = name->str.substr(2);
-    os << s;
-    write_params(name->params);
-    os << "::~" << s;
-  } else {
+  if (name->op.empty()) {
     os << name->str;
     write_tmpl_params(name);
+    return;
   }
+
+  if (name->op == "ctor" || name->op == "dtor") {
+    os << name->str;
+    write_params(name->params);
+    os << "::";
+    if (name->op == "dtor")
+      os << "~";
+    os << name->str;
+    return;
+  }
+
+  os << "operator" << name->op;
 }
 
 void Demangler::write_tmpl_params(Name *name) {
