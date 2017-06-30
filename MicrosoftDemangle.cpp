@@ -265,7 +265,7 @@ private:
   }
 
   void expect(const std::string &s) {
-    if (!consume(s))
+    if (!consume(s) && error.empty())
       error = s + " expected, but got " + input.str();
   }
 
@@ -356,6 +356,7 @@ void Demangler::parse() {
 //
 // <hex-digit>            ::= [A-P]           # A = 0, B = 1, ...
 int Demangler::read_number() {
+  String orig = input;
   bool neg = consume("?");
 
   if (input.startswith_digit()) {
@@ -378,12 +379,16 @@ int Demangler::read_number() {
     }
     break;
   }
-  error = "bad number";
+
+  if (error.empty())
+    error = "bad number: " + orig.str();
   return 0;
 }
 
 // Read until the next '@'.
 String Demangler::read_string(bool memorize) {
+  String orig = input;
+
   for (size_t i = 0; i < input.len; ++i) {
     if (input.p[i] != '@')
       continue;
@@ -394,7 +399,9 @@ String Demangler::read_string(bool memorize) {
       memorize_string(ret);
     return ret;
   }
-  error = "read_string: missing '@': " + input.str();
+
+  if (error.empty())
+    error = "read_string: missing '@': " + orig.str();
   return "";
 }
 
@@ -417,7 +424,8 @@ Name *Demangler::read_name() {
     if (input.startswith_digit()) {
       int i = input.p[0] - '0';
       if (i >= num_names) {
-        error = "name reference too large: " + input.str();
+        if (error.empty())
+          error = "name reference too large: " + input.str();
         return {};
       }
       input.trim(1);
@@ -504,7 +512,8 @@ String Demangler::read_operator_name() {
     }
   }
 
-  error = "unknown operator name: " + orig.str();
+  if (error.empty())
+    error = "unknown operator name: " + orig.str();
   return "";
 }
 
@@ -532,7 +541,8 @@ int Demangler::read_func_class() {
   case 'Z': return Global | FFar;
   default:
     input.unget(c);
-    error = "unknown func class: " + input.str();
+    if (error.empty())
+      error = "unknown func class: " + input.str();
     return 0;
   }
 }
@@ -559,7 +569,8 @@ CallingConv Demangler::read_calling_conv() {
   case 'I': return Fastcall;
   default:
     input.unget(c);
-    error = "unknown calling convention: " + input.str();
+    if (error.empty())
+      error = "unknown calling convention: " + input.str();
     return Cdecl;
   }
 };
@@ -682,7 +693,8 @@ PrimTy Demangler::read_prim_type() {
     }
     // fallthrough
   default:
-    error = "unknown primitive type: " + orig.str();
+    if (error.empty())
+      error = "unknown primitive type: " + orig.str();
     return Unknown;
   }
 }
@@ -703,7 +715,8 @@ void Demangler::read_pointee(Type &ty, PrimTy prim) {
 void Demangler::read_array(Type &ty) {
   int dimension = read_number();
   if (dimension <= 0) {
-    error = "invalid array dimension: " + std::to_string(dimension);
+    if (error.empty())
+      error = "invalid array dimension: " + std::to_string(dimension);
     return;
   }
 
@@ -720,7 +733,7 @@ void Demangler::read_array(Type &ty) {
       ty.sclass = Const;
     else if (consume("C") || consume("D"))
       ty.sclass = Const | Volatile;
-    else if (!consume("A"))
+    else if (!consume("A") && error.empty())
       error = "unkonwn storage class: " + input.str();
   }
 
@@ -737,7 +750,8 @@ Type * Demangler::read_params() {
     if (input.startswith_digit()) {
       int n = input.p[0] - '0';
       if (n >= idx) {
-        error = "invalid backreference: " + input.str();
+        if (error.empty())
+          error = "invalid backreference: " + input.str();
         return nullptr;
       }
       input.trim(1);
