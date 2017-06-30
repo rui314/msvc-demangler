@@ -83,7 +83,7 @@ std::ostream &operator<<(std::ostream &os, const String s) {
 
 // This memory allocator is extremely fast, but it doesn't call dtors
 // for allocated objects. That means you can't use STL containers
-// (such as std::vector) if you use this allocator. But it pays off --
+// (such as std::vector) with this allocator. But it pays off --
 // the demangler is 3x faster with this allocator compared to one with
 // STL containers.
 namespace {
@@ -185,15 +185,25 @@ struct Type;
 
 // Represents an identifier which may be a template.
 struct Name {
+  // Name read from an input string.
   String str;
+
+  // Overloaded operators are represented as special names in mangled symbols.
+  // If this is an operator name, "op" has an operator name (e.g. ">>").
+  // Otherwise, empty.
   String op;
+
+  // Template parameters. Null if not a template.
   Type *params = nullptr;
+
+  // Nested names (e.g. "A::B::C") are represented as a linked list.
   Name *next = nullptr;
 };
 
 // The type class. Mangled symbols are first parsed and converted to
 // this type and then converted to string.
 struct Type {
+  // Primitive type such as Int.
   PrimTy prim;
 
   // Represents a type X in "a pointer to X", "a reference to X",
@@ -212,6 +222,7 @@ struct Type {
   // Function parameters.
   Type *params = nullptr;
 
+  // Lists of types (e.g. function parameters) are represented as linked lists.
   Type *next = nullptr;
 };
 
@@ -239,6 +250,7 @@ private:
   String read_string(bool memorize);
   void memorize_string(String s);
   Name *read_name();
+  void read_func_ptr(Type &ty);
   void read_operator(Name *);
   String read_operator_name();
   String read_until(const std::string &s);
@@ -279,6 +291,7 @@ private:
   // The main symbol name. (e.g. "ns::foo" in "int ns::foo()".)
   Name *symbol = nullptr;
 
+  // Memory allocator.
   Arena arena;
 
   // The first 10 names in a mangled name can be back-referenced by
@@ -356,7 +369,6 @@ void Demangler::parse() {
 //
 // <hex-digit>            ::= [A-P]           # A = 0, B = 1, ...
 int Demangler::read_number() {
-  String orig = input;
   bool neg = consume("?");
 
   if (input.startswith_digit()) {
@@ -365,9 +377,8 @@ int Demangler::read_number() {
     return neg ? -ret : ret;
   }
 
-  size_t i = 0;
-  int32_t ret = 0;
-  for (; i < input.len; ++i) {
+  int ret = 0;
+  for (size_t i = 0; i < input.len; ++i) {
     char c = input.p[i];
     if (c == '@') {
       input.trim(i + 1);
@@ -381,14 +392,12 @@ int Demangler::read_number() {
   }
 
   if (error.empty())
-    error = "bad number: " + orig.str();
+    error = "bad number: " + input.str();
   return 0;
 }
 
 // Read until the next '@'.
 String Demangler::read_string(bool memorize) {
-  String orig = input;
-
   for (size_t i = 0; i < input.len; ++i) {
     if (input.p[i] != '@')
       continue;
@@ -401,12 +410,14 @@ String Demangler::read_string(bool memorize) {
   }
 
   if (error.empty())
-    error = "read_string: missing '@': " + orig.str();
+    error = "read_string: missing '@': " + input.str();
   return "";
 }
 
+// First 10 strings can be referenced by special names ?0, ?1, ..., ?9.
+// Memorize it.
 void Demangler::memorize_string(String s) {
-  if (num_names >= 10)
+  if (num_names >= sizeof(names) / sizeof(*names))
     return;
   for (int i = 0; i < num_names; ++i)
     if (s == names[i])
@@ -448,6 +459,22 @@ Name *Demangler::read_name() {
   }
 
   return head;
+}
+
+void Demangler::read_func_ptr(Type &ty) {
+  Type *tp = new (arena) Type;
+  tp->prim = Function;
+  tp->ptr = new (arena) Type;
+  read_var_type(*tp->ptr);
+  tp->params = read_params();
+
+  ty.prim = Ptr;
+  ty.ptr = tp;
+
+  if (input.startswith("@Z"))
+    input.trim(2);
+  else if (input.startswith("Z"))
+    input.trim(1);
 }
 
 void Demangler::read_operator(Name *name) {
@@ -548,19 +575,21 @@ int Demangler::read_func_class() {
 }
 
 int8_t Demangler::read_func_access_class() {
-  if (consume("A"))
+  switch (int c = input.get()) {
+  case 'A': return 0;
+  case 'B': return Const;
+  case 'C': return Volatile;
+  case 'D': return Const | Volatile;
+  default:
+    input.unget(c);
     return 0;
-  if (consume("B"))
-    return Const;
-  if (consume("C"))
-    return Volatile;
-  if (consume("D"))
-    return Const | Volatile;
-  return 0;
+  }
 }
 
 CallingConv Demangler::read_calling_conv() {
-  switch (int c = input.get()) {
+  String orig = input;
+
+  switch (input.get()) {
   case 'A': return Cdecl;
   case 'B': return Cdecl;
   case 'C': return Pascal;
@@ -568,9 +597,8 @@ CallingConv Demangler::read_calling_conv() {
   case 'G': return Stdcall;
   case 'I': return Fastcall;
   default:
-    input.unget(c);
     if (error.empty())
-      error = "unknown calling convention: " + input.str();
+      error = "unknown calling convention: " + orig.str();
     return Cdecl;
   }
 };
@@ -601,15 +629,20 @@ int8_t Demangler::read_storage_class() {
 }
 
 int8_t Demangler::read_storage_class_for_return() {
-  if (consume("?A"))
+  if (!consume("?"))
     return 0;
-  if (consume("?B"))
-    return Const;
-  if (consume("?C"))
-    return Volatile;
-  if (consume("?D"))
-    return Const | Volatile;
-  return 0;
+  String orig = input;
+
+  switch (input.get()) {
+  case 'A': return 0;
+  case 'B': return Const;
+  case 'C': return Volatile;
+  case 'D': return Const | Volatile;
+  default:
+    if (error.empty())
+      error = "unknown storage class: " + orig.str();
+    return 0;
+  }
 }
 
 // Reads a variable type.
@@ -621,19 +654,7 @@ void Demangler::read_var_type(Type &ty) {
   }
 
   if (consume("P6A")) {
-    ty.prim = Ptr;
-    ty.ptr = new (arena) Type;
-
-    Type &fn = *ty.ptr;
-    fn.prim = Function;
-    fn.ptr = new (arena) Type;
-    read_var_type(*fn.ptr);
-    fn.params = read_params();
-
-    if (input.startswith("@Z"))
-      input.trim(2);
-    else if (input.startswith("Z"))
-      input.trim(1);
+    read_func_ptr(ty);
     return;
   }
 
@@ -670,6 +691,7 @@ void Demangler::read_var_type(Type &ty) {
 // Reads a primitive type.
 PrimTy Demangler::read_prim_type() {
   String orig = input;
+
   switch (input.get()) {
   case 'X': return Void;
   case 'D': return Char;
@@ -691,12 +713,11 @@ PrimTy Demangler::read_prim_type() {
     case 'K': return Uint64;
     case 'W': return Wchar;
     }
-    // fallthrough
-  default:
-    if (error.empty())
-      error = "unknown primitive type: " + orig.str();
-    return Unknown;
   }
+
+  if (error.empty())
+    error = "unknown primitive type: " + orig.str();
+  return Unknown;
 }
 
 void Demangler::read_class(Type &ty, PrimTy prim) {
@@ -740,7 +761,9 @@ void Demangler::read_array(Type &ty) {
   read_var_type(*tp);
 }
 
+// Reads a function or a template parameters.
 Type * Demangler::read_params() {
+  // Within the same parameter list, you can backreference the first 10 types.
   Type *backref[10];
   size_t idx = 0;
 
@@ -766,9 +789,12 @@ Type * Demangler::read_params() {
 
     *tp = new (arena) Type;
     read_var_type(**tp);
+    tp = &(*tp)->next;
+
+    // Single-letter types are ignored for backreferences because
+    // memorizing them doesn't save anything.
     if (idx <= 9 && input.len - len > 1)
       backref[idx++] = *tp;
-    tp = &(*tp)->next;
   }
   return head;
 }
@@ -900,18 +926,21 @@ void Demangler::write_name(Name *name) {
     return;
   write_space();
 
+  // Print out namespaces or outer class names.
   for (; name->next; name = name->next) {
     os << name->str;
     write_tmpl_params(name);
     os << "::";
   }
 
+  // Print out a regular name.
   if (name->op.empty()) {
     os << name->str;
     write_tmpl_params(name);
     return;
   }
 
+  // Print out ctor or dtor.
   if (name->op == "ctor" || name->op == "dtor") {
     os << name->str;
     write_params(name->params);
@@ -922,6 +951,7 @@ void Demangler::write_name(Name *name) {
     return;
   }
 
+  // Print out an overloaded operator.
   if (!name->str.empty())
     os << name->str << "::";
   os << "operator" << name->op;
