@@ -107,7 +107,7 @@ private:
   static constexpr size_t unit = 4096;
 
   uint8_t *buf = init_buf;
-  uint8_t init_buf[4096];
+  uint8_t init_buf[unit];
   size_t nused = 0;
   std::vector<std::unique_ptr<uint8_t[]>> buf2;
 };
