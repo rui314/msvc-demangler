@@ -99,7 +99,7 @@ public:
 
     buf = new uint8_t[Arena::unit];
     buf2.emplace_back(buf);
-    nused = 0;
+    nused = size;
     return buf;
   }
 
