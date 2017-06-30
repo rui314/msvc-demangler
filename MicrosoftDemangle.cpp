@@ -96,8 +96,8 @@ public:
     if (nused < unit)
       return p;
 
-    buf2.emplace_back(new uint8_t[Arena::unit]);
-    buf = buf2.back().get();
+    buf = new uint8_t[Arena::unit];
+    buf2.emplace_back(buf);
     nused = 0;
     return buf;
   }
