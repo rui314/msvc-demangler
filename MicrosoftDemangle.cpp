@@ -285,7 +285,7 @@ private:
   void write_post(Type &ty);
   void write_params(Type *ty);
   void write_name(Name *name);
-  void write_template_params(Name *name);
+  void write_tmpl_params(Name *name);
   void write_space();
 
   // The result is written to this stream.
@@ -910,7 +910,7 @@ void Demangler::write_name(Name *name) {
 
   for (; name->next; name = name->next) {
     os << name->str;
-    write_template_params(name);
+    write_tmpl_params(name);
     os << "::";
   }
 
@@ -927,11 +927,11 @@ void Demangler::write_name(Name *name) {
     os << "::~" << s;
   } else {
     os << name->str;
-    write_template_params(name);
+    write_tmpl_params(name);
   }
 }
 
-void Demangler::write_template_params(Name *name) {
+void Demangler::write_tmpl_params(Name *name) {
   if (!name->params)
     return;
   os << "<";
