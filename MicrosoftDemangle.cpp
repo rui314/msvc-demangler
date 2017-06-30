@@ -201,6 +201,7 @@ private:
   String read_until(const std::string &s);
   PrimTy read_prim_type();
   int read_func_class();
+  int8_t read_func_access_class();
   CallingConv read_calling_conv();
   void read_func_return_type(Type &ty);
   int8_t read_storage_class();
@@ -302,6 +303,7 @@ void Demangler::parse() {
   type.prim = Function;
   type.func_class = (FuncClass)read_func_class();
   expect("E"); // if 64 bit
+  type.sclass = read_func_access_class();
   type.calling_conv = read_calling_conv();
 
   type.ptr = alloc();
@@ -445,9 +447,22 @@ int Demangler::read_func_class() {
   }
 }
 
+int8_t Demangler::read_func_access_class() {
+  if (consume("A"))
+    return 0;
+  if (consume("B"))
+    return Const;
+  if (consume("C"))
+    return Volatile;
+  if (consume("D"))
+    return Const | Volatile;
+  return 0;
+}
+
 CallingConv Demangler::read_calling_conv() {
   switch (int c = input.get()) {
   case 'A':
+  case 'B':
     return Cdecl;
   case 'C':
     return Pascal;
@@ -467,12 +482,10 @@ CallingConv Demangler::read_calling_conv() {
 // <return-type> ::= <type>
 //               ::= @ # structors (they have no declared return type)
 void Demangler::read_func_return_type(Type &ty) {
-  if (consume("@")) {
+  if (consume("@"))
     ty.prim = None;
-    return;
-  }
-  read_var_type(ty);
-  expect("@");
+  else
+    read_var_type(ty);
 }
 
 int8_t Demangler::read_storage_class() {
@@ -813,6 +826,8 @@ void Demangler::write_post(Type &ty) {
     os << "(";
     write_params(ty.params);
     os << ")";
+    if (ty.sclass & Const)
+      os << "const";
     return;
   }
 

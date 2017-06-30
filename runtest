@@ -44,5 +44,6 @@ expect '??0klass@@QEAA@XZ' 'klass::klass(void)'
 expect '??1klass@@QEAA@XZ' 'klass::~klass(void)'
 expect '?x@@YAHPEAVklass@@AEAV1@@Z' 'int x(class klass*,class klass&)'
 expect '?x@ns@@3PEAV?$klass@HH@1@EA' 'class ns::klass<int,int>*ns::x'
+expect '?fn@?$klass@H@ns@@QEBAIXZ' 'unsigned int ns::klass<int>::fn(void)const'
 
 echo OK
