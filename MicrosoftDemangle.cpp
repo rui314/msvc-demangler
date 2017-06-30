@@ -121,7 +121,6 @@ private:
 }
 
 void *operator new(size_t size, Arena &a) { return a.alloc(size); }
-void operator delete(void *, Arena &) {}
 
 // Storage classes
 enum {
@@ -304,7 +303,7 @@ private:
   // The first 10 names in a mangled name can be back-referenced by
   // special name @[0-9]. This is a storage for the first 10 names.
   String names[10];
-  int num_names = 0;
+  size_t num_names = 0;
 
   // Functions to convert Type to String.
   void write_pre(Type &ty);
@@ -426,7 +425,7 @@ String Demangler::read_string(bool memorize) {
 void Demangler::memorize_string(String s) {
   if (num_names >= sizeof(names) / sizeof(*names))
     return;
-  for (int i = 0; i < num_names; ++i)
+  for (size_t i = 0; i < num_names; ++i)
     if (s == names[i])
       return;
   names[num_names++] = s;
@@ -440,7 +439,7 @@ Name *Demangler::read_name() {
     Name *elem = new (arena) Name;
 
     if (input.startswith_digit()) {
-      int i = input.p[0] - '0';
+      size_t i = input.p[0] - '0';
       if (i >= num_names) {
         if (error.empty())
           error = "name reference too large: " + input.str();
@@ -772,7 +771,7 @@ void Demangler::read_array(Type &ty) {
 Type * Demangler::read_params() {
   // Within the same parameter list, you can backreference the first 10 types.
   Type *backref[10];
-  size_t idx = 0;
+  int idx = 0;
 
   Type *head = nullptr;
   Type **tp = &head;
