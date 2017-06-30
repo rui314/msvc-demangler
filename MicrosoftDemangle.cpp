@@ -412,7 +412,7 @@ Name *Demangler::read_name() {
       }
       input.trim(1);
 
-      Name *elem = new (arena) Name();
+      Name *elem = new (arena) Name;
       elem->str = repeated_names[i];
       elem->next = head;
       head = elem;
