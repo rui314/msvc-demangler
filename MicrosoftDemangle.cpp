@@ -6,6 +6,13 @@
 // Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
+//
+// This file defines a demangler for MSVC-style mangled symbols.
+//
+// This file has no dependencies on the rest of LLVM so that it can be
+// easily reused in other programs such as libcxxabi.
+//
+//===----------------------------------------------------------------------===//
 
 #include <algorithm>
 #include <cassert>
@@ -233,7 +240,7 @@ class Demangler {
 public:
   Demangler(String s) : input(s) {}
 
-  // You are supposed to call parse() first and then check if Error is
+  // You are supposed to call parse() first and then check if error is
   // still empty. After that, call str() to get a result.
   void parse();
   std::string str();
@@ -780,8 +787,8 @@ Type * Demangler::read_params() {
       input.trim(1);
 
       *tp = new (arena) Type(*backref[n]);
-      tp = &(*tp)->next;
       (*tp)->next = nullptr;
+      tp = &(*tp)->next;
       continue;
     }
 
@@ -789,12 +796,12 @@ Type * Demangler::read_params() {
 
     *tp = new (arena) Type;
     read_var_type(**tp);
-    tp = &(*tp)->next;
 
     // Single-letter types are ignored for backreferences because
     // memorizing them doesn't save anything.
-    if (idx <= 9 && input.len - len > 1)
+    if (idx <= 9 && len - input.len > 1)
       backref[idx++] = *tp;
+    tp = &(*tp)->next;
   }
   return head;
 }
