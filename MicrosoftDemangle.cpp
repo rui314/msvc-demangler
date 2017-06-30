@@ -255,6 +255,8 @@ private:
   void read_array(Type &ty);
   Type *read_params();
 
+  int peek() { return (input.len == 0) ? -1 : input.p[0]; }
+
   bool consume(const std::string &s) {
     if (!input.startswith(s))
       return false;
@@ -337,7 +339,7 @@ void Demangler::parse() {
   type.calling_conv = read_calling_conv();
 
   type.ptr = new (arena) Type;
-  type.ptr->sclass = read_storage_class();
+  type.ptr->sclass = read_storage_class_for_return();
   read_func_return_type(*type.ptr);
   type.params = read_params();
 }
@@ -441,25 +443,17 @@ Name *Demangler::read_name() {
 }
 
 void Demangler::read_operator(Name *name) {
-  if (consume("0")) {
-    name->op = "ctor";
-    name->str = read_string(true);
-    return;
-  }
-
-  if (consume("1")) {
-    name->op = "dtor";
-    name->str = read_string(true);
-    return;
-  }
-
   name->op = read_operator_name();
+  if (error.empty() && peek() != '@')
+    name->str = read_string(true);
 }
 
 String Demangler::read_operator_name() {
   String orig = input;
 
   switch (input.get()) {
+  case '0': return "ctor";
+  case '1': return "dtor";
   case '2': return " new";
   case '3': return " delete";
   case '4': return "=";
@@ -557,7 +551,7 @@ int8_t Demangler::read_func_access_class() {
 
 CallingConv Demangler::read_calling_conv() {
   switch (int c = input.get()) {
-  case 'A':
+  case 'A': return Cdecl;
   case 'B': return Cdecl;
   case 'C': return Pascal;
   case 'E': return Thiscall;
@@ -833,8 +827,8 @@ void Demangler::write_pre(Type &ty) {
   case Uint:    os << "unsigned int"; break;
   case Long:    os << "long"; break;
   case Ulong:   os << "unsigned long"; break;
-  case Int64:   os << "int64"; break;
-  case Uint64:  os << "uint64"; break;
+  case Int64:   os << "int64_t"; break;
+  case Uint64:  os << "uint64_t"; break;
   case Wchar:   os << "wchar_t"; break;
   case Float:   os << "float"; break;
   case Double:  os << "double"; break;
@@ -914,6 +908,8 @@ void Demangler::write_name(Name *name) {
     return;
   }
 
+  if (!name->str.empty())
+    os << name->str << "::";
   os << "operator" << name->op;
 }
 
