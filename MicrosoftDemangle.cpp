@@ -81,6 +81,40 @@ std::ostream &operator<<(std::ostream &os, const String s) {
   return os;
 }
 
+// We want to reduce the number of memory allocations. To do that,
+// we allocate a fixed number of Type instnaces as part of Demangler.
+// If it needs more Type instances, we dynamically allocate instances
+// and manage them using typebuf2.
+namespace {
+class Arena {
+public:
+  void *alloc(size_t size) {
+    assert(size < unit);
+
+    uint8_t *p = buf + nused;
+    nused += size;
+    if (nused < unit)
+      return p;
+
+    buf2.emplace_back(new uint8_t[Arena::unit]);
+    buf = buf2.back().get();
+    nused = 0;
+    return buf;
+  }
+
+private:
+  static constexpr size_t unit = 4096;
+
+  uint8_t *buf = init_buf;
+  uint8_t init_buf[4096];
+  size_t nused = 0;
+  std::vector<std::unique_ptr<uint8_t[]>> buf2;
+};
+}
+
+void *operator new(size_t size, Arena &a) { return a.alloc(size); }
+void operator delete(void *, Arena &) {}
+
 // Storage classes
 enum {
   Const = 1 << 0,
@@ -144,40 +178,6 @@ enum FuncClass : uint8_t {
   Virtual = 1 << 5,
   FFar = 1 << 6,
 };
-
-// We want to reduce the number of memory allocations. To do that,
-// we allocate a fixed number of Type instnaces as part of Demangler.
-// If it needs more Type instances, we dynamically allocate instances
-// and manage them using typebuf2.
-namespace {
-class Arena {
-public:
-  void *alloc(size_t size) {
-    assert(size < unit);
-
-    uint8_t *p = buf + nused;
-    nused += size;
-    if (nused < unit)
-      return p;
-
-    buf2.emplace_back(new uint8_t[Arena::unit]);
-    buf = buf2.back().get();
-    nused = 0;
-    return buf;
-  }
-
-private:
-  static constexpr size_t unit = 4096;
-
-  uint8_t *buf = init_buf;
-  uint8_t init_buf[4096];
-  size_t nused = 0;
-  std::vector<std::unique_ptr<uint8_t[]>> buf2;
-};
-}
-
-void *operator new(size_t size, Arena &a) { return a.alloc(size); }
-void operator delete(void *, Arena &) {}
 
 namespace {
 struct Type;
