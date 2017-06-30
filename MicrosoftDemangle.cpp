@@ -284,6 +284,7 @@ private:
   // Functions to convert Type to String.
   void write_pre(Type &ty);
   void write_post(Type &ty);
+  void write_class(Name *name, String s);
   void write_params(Type *ty);
   void write_name(Name *name);
   void write_tmpl_params(Name *name);
@@ -443,46 +444,26 @@ Name *Demangler::read_name() {
 
 int Demangler::read_func_class() {
   switch (int c = input.get()) {
-  case 'A':
-    return Private;
-  case 'B':
-    return Private | FFar;
-  case 'C':
-    return Private | Static;
-  case 'D':
-    return Private | Static;
-  case 'E':
-    return Private | Virtual;
-  case 'F':
-    return Private | Virtual;
-  case 'I':
-    return Protected;
-  case 'J':
-    return Protected | FFar;
-  case 'K':
-    return Protected | Static;
-  case 'L':
-    return Protected | Static | FFar;
-  case 'M':
-    return Protected | Virtual;
-  case 'N':
-    return Protected | Virtual | FFar;
-  case 'Q':
-    return Public;
-  case 'R':
-    return Public | FFar;
-  case 'S':
-    return Public | Static;
-  case 'T':
-    return Public | Static | FFar;
-  case 'U':
-    return Public | Virtual;
-  case 'V':
-    return Public | Virtual | FFar;
-  case 'Y':
-    return Global;
-  case 'Z':
-    return Global | FFar;
+  case 'A': return Private;
+  case 'B': return Private | FFar;
+  case 'C': return Private | Static;
+  case 'D': return Private | Static;
+  case 'E': return Private | Virtual;
+  case 'F': return Private | Virtual;
+  case 'I': return Protected;
+  case 'J': return Protected | FFar;
+  case 'K': return Protected | Static;
+  case 'L': return Protected | Static | FFar;
+  case 'M': return Protected | Virtual;
+  case 'N': return Protected | Virtual | FFar;
+  case 'Q': return Public;
+  case 'R': return Public | FFar;
+  case 'S': return Public | Static;
+  case 'T': return Public | Static | FFar;
+  case 'U': return Public | Virtual;
+  case 'V': return Public | Virtual | FFar;
+  case 'Y': return Global;
+  case 'Z': return Global | FFar;
   default:
     input.unget(c);
     error = "unknown func class: " + input.str();
@@ -505,16 +486,11 @@ int8_t Demangler::read_func_access_class() {
 CallingConv Demangler::read_calling_conv() {
   switch (int c = input.get()) {
   case 'A':
-  case 'B':
-    return Cdecl;
-  case 'C':
-    return Pascal;
-  case 'E':
-    return Thiscall;
-  case 'G':
-    return Stdcall;
-  case 'I':
-    return Fastcall;
+  case 'B': return Cdecl;
+  case 'C': return Pascal;
+  case 'E': return Thiscall;
+  case 'G': return Stdcall;
+  case 'I': return Fastcall;
   default:
     input.unget(c);
     error = "unknown calling convention: " + input.str();
@@ -533,22 +509,14 @@ void Demangler::read_func_return_type(Type &ty) {
 
 int8_t Demangler::read_storage_class() {
   switch (int c = input.get()) {
-  case 'A':
-    return 0;
-  case 'B':
-    return Const;
-  case 'C':
-    return Volatile;
-  case 'D':
-    return Const | Volatile;
-  case 'E':
-    return Far;
-  case 'F':
-    return Const | Far;
-  case 'G':
-    return Volatile | Far;
-  case 'H':
-    return Const | Volatile | Far;
+  case 'A': return 0;
+  case 'B': return Const;
+  case 'C': return Volatile;
+  case 'D': return Const | Volatile;
+  case 'E': return Far;
+  case 'F': return Const | Far;
+  case 'G': return Volatile | Far;
+  case 'H': return Const | Volatile | Far;
   default:
     input.unget(c);
     return 0;
@@ -626,42 +594,25 @@ void Demangler::read_var_type(Type &ty) {
 PrimTy Demangler::read_prim_type() {
   String orig = input;
   switch (input.get()) {
-  case 'X':
-    return Void;
-  case 'D':
-    return Char;
-  case 'C':
-    return Schar;
-  case 'E':
-    return Uchar;
-  case 'F':
-    return Short;
-  case 'G':
-    return Ushort;
-  case 'H':
-    return Int;
-  case 'I':
-    return Uint;
-  case 'J':
-    return Long;
-  case 'K':
-    return Ulong;
-  case 'M':
-    return Float;
-  case 'N':
-    return Double;
-  case 'O':
-    return Ldouble;
+  case 'X': return Void;
+  case 'D': return Char;
+  case 'C': return Schar;
+  case 'E': return Uchar;
+  case 'F': return Short;
+  case 'G': return Ushort;
+  case 'H': return Int;
+  case 'I': return Uint;
+  case 'J': return Long;
+  case 'K': return Ulong;
+  case 'M': return Float;
+  case 'N': return Double;
+  case 'O': return Ldouble;
   case '_':
     switch (input.get()) {
-    case 'N':
-      return Bool;
-    case 'J':
-      return Llong;
-    case 'K':
-      return Ullong;
-    case 'W':
-      return Wchar;
+    case 'N': return Bool;
+    case 'J': return Llong;
+    case 'K': return Ullong;
+    case 'W': return Wchar;
     }
     // fallthrough
   default:
@@ -794,73 +745,28 @@ void Demangler::write_pre(Type &ty) {
   case Array:
     write_pre(*ty.ptr);
     break;
-  case Struct:
-    os << "struct ";
-    write_name(ty.name);
-    break;
-  case Union:
-    os << "union ";
-    write_name(ty.name);
-    break;
-  case Class:
-    os << "class ";
-    write_name(ty.name);
-    break;
-  case Enum:
-    os << "enum ";
-    write_name(ty.name);
-    break;
-  case Void:
-    os << "void";
-    break;
-  case Bool:
-    os << "bool";
-    break;
-  case Char:
-    os << "char";
-    break;
-  case Schar:
-    os << "signed char";
-    break;
-  case Uchar:
-    os << "unsigned char";
-    break;
-  case Short:
-    os << "short";
-    break;
-  case Ushort:
-    os << "unsigned short";
-    break;
-  case Int:
-    os << "int";
-    break;
-  case Uint:
-    os << "unsigned int";
-    break;
-  case Long:
-    os << "long";
-    break;
-  case Ulong:
-    os << "unsigned long";
-    break;
-  case Llong:
-    os << "long long";
-    break;
-  case Ullong:
-    os << "unsigned long long";
-    break;
-  case Wchar:
-    os << "wchar_t";
-    break;
-  case Float:
-    os << "float";
-    break;
-  case Double:
-    os << "double";
-    break;
-  case Ldouble:
-    os << "long double";
-    break;
+
+  case Struct: write_class(ty.name, "struct"); break;
+  case Union:  write_class(ty.name, "union"); break;
+  case Class:  write_class(ty.name, "class"); break;
+  case Enum:   write_class(ty.name, "enum"); break;
+  case Void:    os << "void"; break;
+  case Bool:    os << "bool"; break;
+  case Char:    os << "char"; break;
+  case Schar:   os << "signed char"; break;
+  case Uchar:   os << "unsigned char"; break;
+  case Short:   os << "short"; break;
+  case Ushort:  os << "unsigned short"; break;
+  case Int:     os << "int"; break;
+  case Uint:    os << "unsigned int"; break;
+  case Long:    os << "long"; break;
+  case Ulong:   os << "unsigned long"; break;
+  case Llong:   os << "long long"; break;
+  case Ullong:  os << "unsigned long long"; break;
+  case Wchar:   os << "wchar_t"; break;
+  case Float:   os << "float"; break;
+  case Double:  os << "double"; break;
+  case Ldouble: os << "long double"; break;
   }
 
   if (ty.sclass & Const) {
@@ -901,6 +807,11 @@ void Demangler::write_params(Type *params) {
     write_pre(*tp);
     write_post(*tp);
   }
+}
+
+void Demangler::write_class(Name *name, String s) {
+  os << s << " ";
+  write_name(name);
 }
 
 // Write a name read by read_name().
