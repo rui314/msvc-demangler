@@ -194,16 +194,16 @@ struct Name {
 // this type and then converted to string.
 struct Type {
   PrimTy prim;
-  uint8_t sclass = 0;  // storage class
 
   // Represents a type X in "a pointer to X", "a reference to X",
   // "an array of X", or "a function returning X".
   Type *ptr = nullptr;
 
+  uint8_t sclass = 0;  // storage class
   CallingConv calling_conv;
   FuncClass func_class;
 
-  int32_t len; // valid if prim == Array
+  uint32_t len; // valid if prim == Array
 
   // Valid if prim is one of (Struct, Union, Class, Enum).
   Name *name = nullptr;
