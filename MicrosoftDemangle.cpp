@@ -81,10 +81,11 @@ std::ostream &operator<<(std::ostream &os, const String s) {
   return os;
 }
 
-// We want to reduce the number of memory allocations. To do that,
-// we allocate a fixed number of Type instnaces as part of Demangler.
-// If it needs more Type instances, we dynamically allocate instances
-// and manage them using typebuf2.
+// This memory allocator is extremely fast, but it doesn't call dtors
+// for allocated objects. That means you can't use STL containers
+// (such as std::vector) if you use this allocator. But it pays off --
+// the demangler is 3x faster with this allocator compared to one with
+// STL containers.
 namespace {
 class Arena {
 public:
@@ -210,7 +211,7 @@ struct Type {
   // Function parameters.
   Type *params = nullptr;
 
-  Type *next = nullptr;;
+  Type *next = nullptr;
 };
 
 // Demangler class takes the main role in demangling symbols.
