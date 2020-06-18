@@ -459,6 +459,9 @@ Name *Demangler::read_name() {
       // Non-template functions or classes.
       elem->str = read_string(true);
     }
+    
+    if (!error.empty())
+      return {};
 
     elem->next = head;
     head = elem;
